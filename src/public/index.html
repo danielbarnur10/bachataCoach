@@ -120,7 +120,10 @@
       button { background: linear-gradient(90deg, var(--accent), var(--accent-2)); border: none; cursor: pointer; font-weight: 700; }
       .file-card, .video-card, .review-card { background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 16px; padding: 14px; margin-top: 12px; }
       .video-wrap { margin-top: 12px; }
-      video { width: 100%; border-radius: 14px; background: black; }
+      video { width: 100%; border-radius: 14px; background: black; cursor: pointer; }
+      #videoMirrorWrap.mirrored { transform: scaleX(-1); }
+      .custom-video-controls { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+      .custom-video-controls input[type=range] { flex: 1; cursor: pointer; accent-color: var(--accent); border: none; background: none; padding: 0; border-radius: 0; height: 4px; }
       .muted { color: var(--muted); }
       .row { display: flex; justify-content: space-between; gap: 10px; align-items: center; flex-wrap: wrap; }
       .small { font-size: 0.95rem; }
@@ -245,7 +248,16 @@
             <button onclick="stopLooping()" style="margin-left: 12px; padding: 4px 8px; font-size: 0.9rem;">Stop loop</button>
           </div>
           <div class="video-wrap">
-            <video id="videoPlayer" controls playsinline autoplay muted></video>
+            <div id="videoMirrorWrap">
+              <video id="videoPlayer" playsinline autoplay muted></video>
+            </div>
+            <div class="custom-video-controls">
+              <button id="playPauseBtn" onclick="togglePlayPause()" style="padding: 6px 14px; min-width: 44px;">▶</button>
+              <span id="currentTimeDisplay" class="small muted">00:00</span>
+              <input type="range" id="seekBar" min="0" max="100" value="0" step="0.1" oninput="seekVideo(this.value)">
+              <span id="durationDisplay" class="small muted">00:00</span>
+              <button onclick="toggleFullscreen()" style="padding: 6px 10px;">⛶</button>
+            </div>
           </div>
           <div style="margin-top: 12px; padding: 12px; background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 12px;">
             <div style="margin-bottom: 12px;">
@@ -306,13 +318,28 @@
         };
         videoEl.load();
 
-        // Initialize timeline when video loads
+        videoEl.addEventListener('play', () => {
+          const btn = document.getElementById('playPauseBtn');
+          if (btn) btn.textContent = '⏸';
+        });
+        videoEl.addEventListener('pause', () => {
+          const btn = document.getElementById('playPauseBtn');
+          if (btn) btn.textContent = '▶';
+        });
+        videoEl.addEventListener('click', togglePlayPause);
+
         videoEl.addEventListener('loadedmetadata', () => {
           initializeTimeline(videoEl);
+          const durationEl = document.getElementById('durationDisplay');
+          if (durationEl) durationEl.textContent = formatTime(videoEl.duration);
         });
 
         videoEl.addEventListener('timeupdate', () => {
           updateProgressBar(videoEl);
+          const timeEl = document.getElementById('currentTimeDisplay');
+          if (timeEl) timeEl.textContent = formatTime(videoEl.currentTime);
+          const seekBar = document.getElementById('seekBar');
+          if (seekBar && videoEl.duration) seekBar.value = (videoEl.currentTime / videoEl.duration) * 100;
         });
 
         reviewPanel.innerHTML = '<p class="muted">Drag the A and B handles on the timeline to select a loop section, then click "🔄 Loop A-B" to practice.</p>';
@@ -604,7 +631,9 @@
 
       document.addEventListener('keydown', (e) => {
         if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-        if (e.key !== '<' && e.key !== '>') return;
+        const isSlower = e.key === '<' || (e.shiftKey && e.key === ',');
+        const isFaster = e.key === '>' || (e.shiftKey && e.key === '.');
+        if (!isSlower && !isFaster) return;
         const videoEl = document.getElementById('videoPlayer');
         if (!videoEl) return;
 
@@ -616,18 +645,33 @@
           if (diff < closestDiff) { closestDiff = diff; closestIdx = i; }
         });
 
-        const newIdx = e.key === '<'
+        const newIdx = isSlower
           ? Math.max(0, closestIdx - 1)
           : Math.min(SPEED_STEPS.length - 1, closestIdx + 1);
         setPlaybackRate(SPEED_STEPS[newIdx]);
         e.preventDefault();
       });
 
-      function toggleMirror() {
+      function togglePlayPause() {
         const videoEl = document.getElementById('videoPlayer');
-        if (videoEl) {
-          videoEl.style.transform = videoEl.style.transform === 'scaleX(-1)' ? 'scaleX(1)' : 'scaleX(-1)';
-        }
+        if (videoEl) { videoEl.paused ? videoEl.play() : videoEl.pause(); }
+      }
+
+      function seekVideo(percent) {
+        const videoEl = document.getElementById('videoPlayer');
+        if (videoEl && videoEl.duration) videoEl.currentTime = (percent / 100) * videoEl.duration;
+      }
+
+      function toggleFullscreen() {
+        const videoEl = document.getElementById('videoPlayer');
+        if (!videoEl) return;
+        if (document.fullscreenElement) document.exitFullscreen();
+        else videoEl.requestFullscreen().catch(() => {});
+      }
+
+      function toggleMirror() {
+        const wrap = document.getElementById('videoMirrorWrap');
+        if (wrap) wrap.classList.toggle('mirrored');
       }
 
       async function deleteVideo(id) {
