@@ -275,12 +275,19 @@
               <input type="hidden" id="manualBTime" value="10" />
             </div>
           </div>
-          <div class="actions" style="margin-top: 12px;">
+          <div class="actions" style="margin-top: 12px; align-items: center;">
+            <button onclick="setPlaybackRate(0.25)">0.25x</button>
+            <button onclick="setPlaybackRate(0.5)">0.5x</button>
             <button onclick="setPlaybackRate(0.75)">0.75x</button>
             <button onclick="setPlaybackRate(1)">1x</button>
             <button onclick="setPlaybackRate(1.25)">1.25x</button>
+            <button onclick="setPlaybackRate(1.5)">1.5x</button>
+            <button onclick="setPlaybackRate(1.75)">1.75x</button>
+            <button onclick="setPlaybackRate(2)">2x</button>
+            <span id="speedDisplay" class="small muted" style="align-self: center; min-width: 70px;">Speed: 1x</span>
             <button onclick="toggleMirror()">Mirror</button>
           </div>
+          <div class="small muted" style="margin-top: 6px; padding-left: 2px;">Shift+&lt; / Shift+&gt; to step speed</div>
           <hr style="border: none; border-top: 1px solid var(--border); margin: 12px 0;">
           <div style="margin-top: 12px;">
             <strong>AI Review (Optional)</strong>
@@ -584,10 +591,37 @@
         return `${mins}:${secs}`;
       }
 
+      const SPEED_STEPS = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
+
       function setPlaybackRate(rate) {
         const videoEl = document.getElementById('videoPlayer');
-        if (videoEl) videoEl.playbackRate = rate;
+        if (videoEl) {
+          videoEl.playbackRate = rate;
+          const display = document.getElementById('speedDisplay');
+          if (display) display.textContent = `Speed: ${rate}x`;
+        }
       }
+
+      document.addEventListener('keydown', (e) => {
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+        if (e.key !== '<' && e.key !== '>') return;
+        const videoEl = document.getElementById('videoPlayer');
+        if (!videoEl) return;
+
+        const current = videoEl.playbackRate;
+        let closestIdx = 0;
+        let closestDiff = Infinity;
+        SPEED_STEPS.forEach((s, i) => {
+          const diff = Math.abs(s - current);
+          if (diff < closestDiff) { closestDiff = diff; closestIdx = i; }
+        });
+
+        const newIdx = e.key === '<'
+          ? Math.max(0, closestIdx - 1)
+          : Math.min(SPEED_STEPS.length - 1, closestIdx + 1);
+        setPlaybackRate(SPEED_STEPS[newIdx]);
+        e.preventDefault();
+      });
 
       function toggleMirror() {
         const videoEl = document.getElementById('videoPlayer');
