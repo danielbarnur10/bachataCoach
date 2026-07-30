@@ -1,0 +1,8 @@
+export { UserEntity } from './user.entity';
+export { VideoEntity } from './video.entity';
+export { ReviewEntity } from './review.entity';
+export { ReviewChunkEntity } from './review-chunk.entity';
+export { FeedbackItemEntity } from './feedback-item.entity';
+export { SavedLoopEntity } from './saved-loop.entity';
+export { CoachPlanEntity } from './coach-plan.entity';
+export { ProcessingJobEntity } from './processing-job.entity';

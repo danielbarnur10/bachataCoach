@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Jack & Jill Coach</title>
+    <style>
+      :root {
+        --bg: #080b14;
+        --panel: #121a2b;
+        --panel-2: #1d2942;
+        --accent: #f43f5e;
+        --accent-2: #fb923c;
+        --text: #f9fafb;
+        --muted: #cbd5e1;
+        --border: rgba(255,255,255,0.12);
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: Inter, Arial, sans-serif;
+        background: linear-gradient(135deg, #0f172a, #020617);
+        color: var(--text);
+        min-height: 100vh;
+        padding: 24px;
+      }
+
+      .app {
+        max-width: 1200px;
+        margin: 0 auto;
+        display: grid;
+        gap: 20px;
+      }
+
+      .card {
+        background: rgba(18, 26, 43, 0.95);
+        border: 1px solid var(--border);
+        border-radius: 24px;
+        padding: 24px;
+        box-shadow: 0 20px 55px rgba(0,0,0,0.25);
+      }
+
+      .timeline {
+        width: 100%;
+        margin: 12px 0;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .timeline-bar {
+        position: relative;
+        width: 100%;
+        height: 8px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 4px;
+        cursor: pointer;
+      }
+
+      .timeline-progress {
+        position: absolute;
+        height: 100%;
+        background: rgba(244, 63, 94, 0.3);
+        border-radius: 4px;
+        pointer-events: none;
+      }
+
+      .timeline-range {
+        position: absolute;
+        height: 100%;
+        background: rgba(251, 146, 60, 0.5);
+        border-radius: 4px;
+        pointer-events: none;
+      }
+
+      .timeline-handle {
+        position: absolute;
+        width: 14px;
+        height: 20px;
+        background: #f43f5e;
+        border: 2px solid white;
+        border-radius: 3px;
+        top: 50%;
+        transform: translateY(-50%);
+        cursor: col-resize;
+        transition: all 0.1s;
+      }
+
+      .timeline-handle:hover {
+        width: 16px;
+        height: 22px;
+      }
+
+      .timeline-handle.b-handle {
+        background: #fb923c;
+      }
+
+      .timeline-labels {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.85rem;
+        color: var(--muted);
+      }
+
+      .pill-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+      .pill { padding: 8px 12px; border-radius: 999px; background: rgba(244,63,94,0.18); color: #fda4af; font-size: 0.95rem; }
+
+      .grid { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 20px; }
+      .panel { background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 18px; padding: 18px; }
+      .controls { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+      input, select, button, textarea {
+        font: inherit;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        padding: 10px 12px;
+        background: rgba(255,255,255,0.04);
+        color: var(--text);
+      }
+      button { background: linear-gradient(90deg, var(--accent), var(--accent-2)); border: none; cursor: pointer; font-weight: 700; }
+      .file-card, .video-card, .review-card { background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 16px; padding: 14px; margin-top: 12px; }
+      .video-wrap { margin-top: 12px; }
+      video { width: 100%; border-radius: 14px; background: black; }
+      .muted { color: var(--muted); }
+      .row { display: flex; justify-content: space-between; gap: 10px; align-items: center; flex-wrap: wrap; }
+      .small { font-size: 0.95rem; }
+      .list { display: grid; gap: 10px; }
+      .item { padding: 12px; border-radius: 12px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); }
+      .item:hover { background: rgba(255,255,255,0.07); }
+      .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+      .danger { background: #dc2626; }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <div class="card hero">
+        <div>
+          <h1>💃 Jack & Jill Coach</h1>
+          <p>Upload your training videos, review them with AI guidance, and improve your musicality, style, and timing for Jack and Jill competitions.</p>
+          <div class="pill-row">
+            <span class="pill">AI Review</span>
+            <span class="pill">Video Playback</span>
+            <span class="pill">CRUD Files</span>
+            <span class="pill">Mirror & Speed</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="card panel">
+          <h2>Upload and manage videos</h2>
+          <div class="controls">
+            <input id="titleInput" type="text" placeholder="Video title" />
+            <input id="fileInput" type="file" accept="video/*" />
+            <button id="uploadBtn">Upload video</button>
+          </div>
+          <div style="margin-top: 12px; padding: 12px; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 12px;">
+            <div style="margin-bottom: 8px;">
+              <strong>📱 Upload from URL</strong>
+              <span class="small muted" style="display: block; margin-top: 4px;">YouTube or Instagram (max 10 minutes)</span>
+            </div>
+            <div class="controls">
+              <input id="urlInput" type="text" placeholder="Paste YouTube or Instagram URL" />
+              <button id="uploadUrlBtn">Upload from URL</button>
+            </div>
+            <div id="urlStatus" class="muted small" style="margin-top: 8px;"></div>
+          </div>
+          <div id="uploadStatus" class="muted">No video uploaded yet.</div>
+          <div id="fileList" class="list"></div>
+        </div>
+
+        <div class="card panel">
+          <h2>Playback and AI review</h2>
+          <div id="playerPanel" class="video-card">
+            <p class="muted">Select a video to watch and review.</p>
+          </div>
+          <div id="reviewPanel" class="review-card">
+            <p class="muted">AI feedback will appear here after upload.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const state = {
+        videos: [],
+        selectedVideoId: null,
+        reviewState: null,
+      };
+
+      async function refreshVideos() {
+        try {
+          const response = await fetch('/videos');
+          if (!response.ok) throw new Error('Unable to load videos');
+          state.videos = await response.json();
+          renderFiles();
+          if (!state.selectedVideoId && state.videos.length) {
+            selectVideo(state.videos[0].id);
+          }
+        } catch (error) {
+          document.getElementById('uploadStatus').textContent = 'Could not load videos from the backend.';
+        }
+      }
+
+      function renderFiles() {
+        const fileList = document.getElementById('fileList');
+        if (!state.videos.length) {
+          fileList.innerHTML = '<div class="item"><strong>No videos yet.</strong></div>';
+          return;
+        }
+
+        fileList.innerHTML = state.videos
+          .map((video) => `
+          <div class="item">
+            <div class="row">
+              <strong>${video.title}</strong>
+              <span class="small muted">${video.filename}</span>
+            </div>
+            <div class="actions">
+              <button onclick="selectVideo('${video.id}')">Open</button>
+              <button class="danger" onclick="deleteVideo('${video.id}')">Delete</button>
+            </div>
+          </div>
+        `)
+          .join('');
+      }
+
+      async function selectVideo(id) {
+        const video = state.videos.find((item) => item.id === id);
+        if (!video) return;
+
+        stopLooping();
+        state.selectedVideoId = id;
+        state.reviewState = null;
+        const playerPanel = document.getElementById('playerPanel');
+        const reviewPanel = document.getElementById('reviewPanel');
+
+        playerPanel.innerHTML = `
+          <div class="row">
+            <h3>${video.title}</h3>
+            <span class="small muted">${video.filename}</span>
+          </div>
+          <div id="loopIndicator" style="display: none; padding: 8px 12px; margin-bottom: 12px; background: rgba(244,63,94,0.2); border-left: 3px solid #f43f5e; border-radius: 6px;">
+            <strong style="color: #fda4af;">🔄 Looping:</strong> <span id="loopTime"></span>
+            <button onclick="stopLooping()" style="margin-left: 12px; padding: 4px 8px; font-size: 0.9rem;">Stop loop</button>
+          </div>
+          <div class="video-wrap">
+            <video id="videoPlayer" controls playsinline autoplay muted></video>
+          </div>
+          <div style="margin-top: 12px; padding: 12px; background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 12px;">
+            <div style="margin-bottom: 12px;">
+              <strong>🎬 A-B Loop Practice</strong>
+              <span class="small muted" style="display: block; margin-top: 4px;">Drag the handles on the timeline to set your loop section</span>
+            </div>
+
+            <div class="timeline">
+              <div class="timeline-bar" id="timelineBar">
+                <div class="timeline-progress" id="progressBar" style="width: 0%;"></div>
+                <div class="timeline-range" id="rangeBar" style="left: 0%; width: 10%;"></div>
+                <div class="timeline-handle" id="handleA" style="left: 0%;"></div>
+                <div class="timeline-handle b-handle" id="handleB" style="left: 10%;"></div>
+              </div>
+              <div class="timeline-labels">
+                <span id="timeA">00:00</span>
+                <span id="timeDisplay">Duration: --:--</span>
+                <span id="timeB">00:10</span>
+              </div>
+            </div>
+
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px;">
+              <button onclick="startManualLoop()" id="loopToggleBtn">🔄 Loop A-B</button>
+              <button onclick="stopLooping()" id="stopLoopBtn" style="display: none;">⏹ Stop Loop</button>
+              <span id="loopDisplayTime" class="small muted" style="align-self: center;"></span>
+              <input type="hidden" id="manualATime" value="0" />
+              <input type="hidden" id="manualBTime" value="10" />
+            </div>
+          </div>
+          <div class="actions" style="margin-top: 12px;">
+            <button onclick="setPlaybackRate(0.75)">0.75x</button>
+            <button onclick="setPlaybackRate(1)">1x</button>
+            <button onclick="setPlaybackRate(1.25)">1.25x</button>
+            <button onclick="toggleMirror()">Mirror</button>
+          </div>
+          <hr style="border: none; border-top: 1px solid var(--border); margin: 12px 0;">
+          <div style="margin-top: 12px;">
+            <strong>AI Review (Optional)</strong>
+            <div class="actions" style="margin-top: 8px;">
+              <input id="aTimeInput" type="number" min="0" placeholder="A time (seconds)" value="0" style="max-width: 150px;" />
+              <input id="bTimeInput" type="number" min="0" placeholder="B time (seconds)" value="120" style="max-width: 150px;" />
+              <button onclick="startReview('${id}')">Start AI Review</button>
+            </div>
+          </div>
+        `;
+
+        const videoEl = document.getElementById('videoPlayer');
+        videoEl.src = '/videos/' + video.id + '/file';
+        videoEl.onerror = () => {
+          reviewPanel.innerHTML = '<p class="muted">The video could not be loaded. Please re-upload it or check the server logs.</p>';
+        };
+        videoEl.load();
+
+        // Initialize timeline when video loads
+        videoEl.addEventListener('loadedmetadata', () => {
+          initializeTimeline(videoEl);
+        });
+
+        videoEl.addEventListener('timeupdate', () => {
+          updateProgressBar(videoEl);
+        });
+
+        reviewPanel.innerHTML = '<p class="muted">Drag the A and B handles on the timeline to select a loop section, then click "🔄 Loop A-B" to practice.</p>';
+      }
+
+      function initializeTimeline(videoEl) {
+        const duration = videoEl.duration || 120;
+        const handleA = document.getElementById('handleA');
+        const handleB = document.getElementById('handleB');
+        const rangeBar = document.getElementById('rangeBar');
+        const timelineBar = document.getElementById('timelineBar');
+
+        let aTime = 0;
+        let bTime = Math.min(10, duration * 0.1);
+
+        const updateDisplay = () => {
+          const aPercent = (aTime / duration) * 100;
+          const bPercent = (bTime / duration) * 100;
+          handleA.style.left = aPercent + '%';
+          handleB.style.left = bPercent + '%';
+          rangeBar.style.left = aPercent + '%';
+          rangeBar.style.width = (bPercent - aPercent) + '%';
+          document.getElementById('timeA').textContent = formatTime(aTime);
+          document.getElementById('timeB').textContent = formatTime(bTime);
+          document.getElementById('timeDisplay').textContent = `Duration: ${formatTime(bTime - aTime)}`;
+
+          document.getElementById('manualATime').value = aTime;
+          document.getElementById('manualBTime').value = bTime;
+        };
+
+        const dragHandle = (handle, isB) => {
+          let isDragging = false;
+
+          handle.addEventListener('mousedown', () => {
+            isDragging = true;
+          });
+
+          document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+
+            const rect = timelineBar.getBoundingClientRect();
+            const percent = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+            const time = (percent / 100) * duration;
+
+            if (isB) {
+              bTime = Math.max(aTime + 0.1, time);
+            } else {
+              aTime = Math.min(time, bTime - 0.1);
+            }
+
+            updateDisplay();
+          });
+
+          document.addEventListener('mouseup', () => {
+            isDragging = false;
+          });
+        };
+
+        dragHandle(handleA, false);
+        dragHandle(handleB, true);
+
+        timelineBar.addEventListener('click', (e) => {
+          const rect = timelineBar.getBoundingClientRect();
+          const percent = ((e.clientX - rect.left) / rect.width) * 100;
+          const time = (percent / 100) * duration;
+          const midpoint = (aTime + bTime) / 2;
+
+          if (time < midpoint) {
+            aTime = Math.max(0, Math.min(time, bTime - 0.1));
+          } else {
+            bTime = Math.min(duration, Math.max(time, aTime + 0.1));
+          }
+
+          updateDisplay();
+        });
+
+        updateDisplay();
+      }
+
+      function updateProgressBar(videoEl) {
+        const duration = videoEl.duration || 120;
+        const percent = (videoEl.currentTime / duration) * 100;
+        const progressBar = document.getElementById('progressBar');
+        if (progressBar) progressBar.style.width = percent + '%';
+      }
+
+      function startManualLoop() {
+        const aTime = parseFloat(document.getElementById('manualATime').value) || 0;
+        const bTime = parseFloat(document.getElementById('manualBTime').value) || 10;
+
+        if (aTime >= bTime) {
+          alert('A time must be before B time');
+          return;
+        }
+
+        loopSegment(aTime, bTime);
+        document.getElementById('loopToggleBtn').style.display = 'none';
+        document.getElementById('stopLoopBtn').style.display = 'inline-block';
+      }
+
+      function setAFromCurrent() {
+        const videoEl = document.getElementById('videoPlayer');
+        if (videoEl) {
+          const currentTime = Math.floor(videoEl.currentTime);
+          document.getElementById('manualATimeInput').value = currentTime;
+          const display = document.getElementById('loopDisplayTime');
+          if (display) display.textContent = `A: ${formatTime(currentTime)}`;
+        }
+      }
+
+      function setBFromCurrent() {
+        const videoEl = document.getElementById('videoPlayer');
+        if (videoEl) {
+          const currentTime = Math.floor(videoEl.currentTime);
+          document.getElementById('manualBTimeInput').value = currentTime;
+          const display = document.getElementById('loopDisplayTime');
+          if (display) display.textContent = `B: ${formatTime(currentTime)}`;
+        }
+      }
+
+      async function startReview(videoId) {
+        const aTime = parseFloat(document.getElementById('aTimeInput').value) || 0;
+        const bTime = parseFloat(document.getElementById('bTimeInput').value) || 30;
+
+        const reviewPanel = document.getElementById('reviewPanel');
+        reviewPanel.innerHTML = '<p class="muted">Initializing review...</p>';
+
+        try {
+          const response = await fetch(`/videos/${videoId}/review/start`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ aTime, bTime }),
+          });
+
+          if (!response.ok) throw new Error('Failed to start review');
+          const reviewData = await response.json();
+
+          state.reviewState = {
+            videoId,
+            aTime,
+            bTime,
+            totalChunks: reviewData.totalChunks,
+            currentChunk: 1,
+          };
+
+          await loadChunk(videoId, 1, aTime, bTime);
+        } catch (error) {
+          reviewPanel.innerHTML = '<p class="muted">Failed to start review. Try again.</p>';
+        }
+      }
+
+      async function loadChunk(videoId, chunkNumber, aTime, bTime) {
+        const reviewPanel = document.getElementById('reviewPanel');
+        reviewPanel.innerHTML = '<p class="muted">Loading chunk...</p>';
+
+        try {
+          const response = await fetch(`/videos/${videoId}/review/chunk/${chunkNumber}?aTime=${aTime}&bTime=${bTime}`);
+          if (!response.ok) throw new Error('Chunk unavailable');
+          const data = await response.json();
+          renderReviewPanel(videoId, data);
+        } catch (error) {
+          reviewPanel.innerHTML = '<p class="muted">This chunk could not be loaded.</p>';
+        }
+      }
+
+      async function renderReviewPanel(videoId, data) {
+        const reviewPanel = document.getElementById('reviewPanel');
+        // Don't filter segments - backend guarantees they're for this chunk
+        const segments = data.segments || [];
+        const segmentsHtml = segments
+          .map(
+            (segment) => `
+          <li style="cursor: pointer; padding: 10px; background: rgba(255,255,255,0.05); border-radius: 8px; margin-bottom: 8px;" onclick="loopSegment(${segment.startTime}, ${segment.endTime})">
+            <strong>${formatTime(segment.startTime)}–${formatTime(segment.endTime)}:</strong> ${segment.label} — ${segment.reason}
+            <span class="small muted" style="display: block; margin-top: 4px;">🔄 Click to loop this moment</span>
+          </li>
+        `,
+          )
+          .join('');
+
+        const nextButton = data.hasNextChunk ? `<button onclick="loadChunk('${videoId}', ${data.chunkNumber + 1}, ${data.aTime}, ${data.bTime})">Next: ${data.nextChunkLabel}</button>` : '<p><strong>Review complete for this section!</strong></p>';
+
+        reviewPanel.innerHTML = `
+          <h3>AI Coaching — Chunk ${data.chunkNumber} of ${data.totalChunks}</h3>
+          <p><strong>Time:</strong> ${formatTime(data.chunkStartTime)}–${formatTime(data.chunkEndTime)} (${Math.round(data.chunkDuration)}s)</p>
+          <p><strong>Source:</strong> ${data.analysisSource || 'heuristic'}</p>
+          <p><strong>Summary:</strong> ${data.summary}</p>
+          <p><strong>Musicality:</strong> ${data.musicality}</p>
+          <p><strong>Style:</strong> ${data.style}</p>
+          <h4>Tips for this section:</h4>
+          <ul>${data.improvementTips.map((tip) => '<li>' + tip + '</li>').join('')}</ul>
+          <h4>🎬 Moment-by-moment (click to loop):</h4>
+          <ul>${segmentsHtml || '<li>No segments found.</li>'}</ul>
+          <div id="loopStatus" class="muted small" style="margin-top: 12px; padding: 8px; border-radius: 8px; background: rgba(255,255,255,0.02);"></div>
+          <div class="actions">
+            ${nextButton}
+            <button onclick="selectVideo('${videoId}')">Back to Player</button>
+          </div>
+        `;
+      }
+
+      function loopSegment(startTime, endTime) {
+        const videoEl = document.getElementById('videoPlayer');
+        if (!videoEl) {
+          alert('Video player not found');
+          return;
+        }
+
+        // Clear any existing loop first
+        stopLooping();
+
+        videoEl.currentTime = startTime;
+        videoEl.play();
+
+        const loopIndicator = document.getElementById('loopIndicator');
+        const loopTime = document.getElementById('loopTime');
+        if (loopIndicator) {
+          loopIndicator.style.display = 'block';
+          if (loopTime) loopTime.textContent = `${formatTime(startTime)} to ${formatTime(endTime)}`;
+        }
+
+        const loopStatus = document.getElementById('loopStatus');
+        if (loopStatus) {
+          loopStatus.innerHTML = `<strong>🔄 Looping:</strong> ${formatTime(startTime)} to ${formatTime(endTime)}`;
+        }
+
+        let checkLoop = setInterval(() => {
+          if (!videoEl) {
+            clearInterval(checkLoop);
+            return;
+          }
+
+          if (videoEl.currentTime >= endTime) {
+            videoEl.currentTime = startTime;
+          } else if (videoEl.paused) {
+            clearInterval(checkLoop);
+            if (loopStatus) loopStatus.innerHTML = '';
+            if (loopIndicator) loopIndicator.style.display = 'none';
+          }
+        }, 50);
+
+        videoEl.dataset.loopStart = startTime;
+        videoEl.dataset.loopEnd = endTime;
+        videoEl.dataset.loopInterval = checkLoop;
+      }
+
+      function stopLooping() {
+        const videoEl = document.getElementById('videoPlayer');
+        if (videoEl && videoEl.dataset.loopInterval) {
+          const intervalId = parseInt(videoEl.dataset.loopInterval, 10);
+          if (!isNaN(intervalId)) {
+            clearInterval(intervalId);
+          }
+          delete videoEl.dataset.loopStart;
+          delete videoEl.dataset.loopEnd;
+          delete videoEl.dataset.loopInterval;
+        }
+        const loopIndicator = document.getElementById('loopIndicator');
+        if (loopIndicator) loopIndicator.style.display = 'none';
+        const loopStatus = document.getElementById('loopStatus');
+        if (loopStatus) loopStatus.innerHTML = '';
+
+        // Show/hide buttons
+        const loopToggleBtn = document.getElementById('loopToggleBtn');
+        const stopLoopBtn = document.getElementById('stopLoopBtn');
+        if (loopToggleBtn) loopToggleBtn.style.display = 'inline-block';
+        if (stopLoopBtn) stopLoopBtn.style.display = 'none';
+      }
+
+      function formatTime(seconds) {
+        const safe = Math.max(0, Math.floor(seconds));
+        const mins = Math.floor(safe / 60)
+          .toString()
+          .padStart(2, '0');
+        const secs = (safe % 60).toString().padStart(2, '0');
+        return `${mins}:${secs}`;
+      }
+
+      function setPlaybackRate(rate) {
+        const videoEl = document.getElementById('videoPlayer');
+        if (videoEl) videoEl.playbackRate = rate;
+      }
+
+      function toggleMirror() {
+        const videoEl = document.getElementById('videoPlayer');
+        if (videoEl) {
+          videoEl.style.transform = videoEl.style.transform === 'scaleX(-1)' ? 'scaleX(1)' : 'scaleX(-1)';
+        }
+      }
+
+      async function deleteVideo(id) {
+        try {
+          const response = await fetch('/videos/' + id, { method: 'DELETE' });
+          if (!response.ok) throw new Error('Delete failed');
+          state.selectedVideoId = null;
+          await refreshVideos();
+        } catch (error) {
+          document.getElementById('uploadStatus').textContent = 'Unable to delete the video.';
+        }
+      }
+
+      document.getElementById('uploadUrlBtn').addEventListener('click', async () => {
+        const urlInput = document.getElementById('urlInput');
+        const url = urlInput.value?.trim();
+        if (!url) {
+          document.getElementById('urlStatus').textContent = 'Please paste a URL';
+          return;
+        }
+
+        // Check if URL is from supported sources
+        const isSupportedUrl = url.includes('youtube.com') || url.includes('youtu.be') || url.includes('instagram.com');
+        if (!isSupportedUrl) {
+          document.getElementById('urlStatus').textContent = '❌ Only YouTube and Instagram URLs are supported';
+          return;
+        }
+
+        const urlStatus = document.getElementById('urlStatus');
+        urlStatus.innerHTML = '<span style="color: #fb923c;">⏳ Downloading video... This may take a minute...</span>';
+        document.getElementById('uploadUrlBtn').disabled = true;
+
+        try {
+          const response = await fetch('/videos/upload-from-url', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              url,
+              title: document.getElementById('titleInput').value || undefined,
+            }),
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+            urlStatus.innerHTML = `
+              <span style="color: #10b981;">✅ ${data.message}</span><br/>
+              <span class="small muted">From: ${data.source}</span>
+            `;
+            urlInput.value = '';
+            await refreshVideos();
+          } else if (data.error) {
+            // Show helpful error message with manual download instructions
+            urlStatus.innerHTML = `
+              <span style="color: #ef4444;"><strong>⚠️ ${data.error}</strong></span>
+              ${data.reasons ? '<div class="small muted" style="margin-top: 8px;">' + data.reasons.map((r) => `• ${r}`).join('<br/>') + '</div>' : ''}
+
+              <div style="margin-top: 12px; padding: 12px; background: rgba(251, 146, 60, 0.1); border-left: 3px solid #fb923c; border-radius: 6px;">
+                <strong style="color: #fb923c;">📥 Download Manually (2 steps):</strong>
+                <div class="small" style="margin-top: 8px; line-height: 1.8;">
+                  <strong>Step 1: Download the video</strong><br/>
+                  1. Go to <a href="https://savefrom.net" target="_blank" style="color: #10b981; text-decoration: underline;">savefrom.net</a><br/>
+                  2. Paste this URL: <code style="background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 3px; font-size: 0.9em;">${url}</code><br/>
+                  3. Click the download button<br/>
+                  4. Select <strong>MP4</strong> format and wait<br/>
+                  <br/>
+                  <strong>Step 2: Upload to Bachata Coach</strong><br/>
+                  1. Click <strong>"Upload video"</strong> above<br/>
+                  2. Select the downloaded MP4 file<br/>
+                  3. Click <strong>"Upload video"</strong> and start practicing!
+                </div>
+              </div>
+              ${data.options ? '<div class="small muted" style="margin-top: 8px;">' + data.options.map((o) => `• ${o}`).join('<br/>') + '</div>' : ''}
+            `;
+          }
+        } catch (error) {
+          console.error('Upload error:', error);
+          urlStatus.innerHTML = `
+            <span style="color: #ef4444;"><strong>❌ Network Error</strong></span>
+            <div class="small muted" style="margin-top: 8px;">
+              Please try uploading the file directly instead.
+              <a href="https://savefrom.net" target="_blank" style="color: #10b981; text-decoration: underline;">Download here first</a>
+            </div>
+          `;
+        }
+
+        document.getElementById('uploadUrlBtn').disabled = false;
+      });
+
+      document.getElementById('uploadBtn').addEventListener('click', async () => {
+        const fileInput = document.getElementById('fileInput');
+        const titleInput = document.getElementById('titleInput');
+        const file = fileInput.files[0];
+        if (!file) {
+          document.getElementById('uploadStatus').textContent = 'Please choose a video file.';
+          return;
+        }
+
+        const uploadStatus = document.getElementById('uploadStatus');
+        uploadStatus.textContent = `Uploading ${file.name}...`;
+
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('title', titleInput.value || file.name);
+
+        try {
+          const response = await fetch('/videos', { method: 'POST', body: formData });
+          const data = await response.json();
+          uploadStatus.textContent = `Upload complete. ${file.name} is ready to play.`;
+          await refreshVideos();
+          if (data.video) {
+            selectVideo(data.video.id);
+          }
+        } catch (error) {
+          uploadStatus.textContent = 'Upload failed. Please try again.';
+        }
+      });
+
+      refreshVideos();
+    </script>
+  </body>
+</html>
