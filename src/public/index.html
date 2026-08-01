@@ -4,23 +4,65 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Jack & Jill Coach</title>
+    <!-- Must run before CSS to avoid flash of wrong theme -->
+    <script>
+      (function() {
+        const saved = localStorage.getItem('theme');
+        const sys = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        if ((saved || sys) === 'light') document.documentElement.setAttribute('data-theme', 'light');
+      })();
+    </script>
     <style>
       :root {
         --bg: #080b14;
-        --panel: #121a2b;
-        --panel-2: #1d2942;
         --accent: #f43f5e;
         --accent-2: #fb923c;
         --text: #f9fafb;
         --muted: #cbd5e1;
         --border: rgba(255,255,255,0.12);
+        --body-bg: linear-gradient(135deg, #0f172a, #020617);
+        --card-bg: rgba(18,26,43,0.95);
+        --panel-bg: rgba(255,255,255,0.03);
+        --item-bg: rgba(255,255,255,0.04);
+        --item-hover: rgba(255,255,255,0.07);
+        --input-bg: rgba(255,255,255,0.04);
+        --chat-ai-bg: rgba(255,255,255,0.07);
+        --timeline-track: rgba(255,255,255,0.1);
+      }
+      [data-theme="light"] {
+        --text: #0f172a;
+        --muted: #64748b;
+        --border: rgba(0,0,0,0.10);
+        --body-bg: linear-gradient(135deg, #f1f5f9, #e2e8f0);
+        --card-bg: rgba(255,255,255,0.97);
+        --panel-bg: rgba(0,0,0,0.02);
+        --item-bg: rgba(0,0,0,0.03);
+        --item-hover: rgba(0,0,0,0.06);
+        --input-bg: rgba(0,0,0,0.04);
+        --chat-ai-bg: rgba(0,0,0,0.06);
+        --timeline-track: rgba(0,0,0,0.10);
+      }
+      @media (prefers-color-scheme: light) {
+        :root:not([data-theme="dark"]) {
+          --text: #0f172a;
+          --muted: #64748b;
+          --border: rgba(0,0,0,0.10);
+          --body-bg: linear-gradient(135deg, #f1f5f9, #e2e8f0);
+          --card-bg: rgba(255,255,255,0.97);
+          --panel-bg: rgba(0,0,0,0.02);
+          --item-bg: rgba(0,0,0,0.03);
+          --item-hover: rgba(0,0,0,0.06);
+          --input-bg: rgba(0,0,0,0.04);
+          --chat-ai-bg: rgba(0,0,0,0.06);
+          --timeline-track: rgba(0,0,0,0.10);
+        }
       }
 
       * { box-sizing: border-box; }
       body {
         margin: 0;
         font-family: Inter, Arial, sans-serif;
-        background: linear-gradient(135deg, #0f172a, #020617);
+        background: var(--body-bg);
         color: var(--text);
         min-height: 100vh;
         padding: 24px;
@@ -34,11 +76,11 @@
       }
 
       .card {
-        background: rgba(18, 26, 43, 0.95);
+        background: var(--card-bg);
         border: 1px solid var(--border);
         border-radius: 24px;
         padding: 24px;
-        box-shadow: 0 20px 55px rgba(0,0,0,0.25);
+        box-shadow: 0 20px 55px rgba(0,0,0,0.15);
       }
 
       .timeline {
@@ -53,7 +95,7 @@
         position: relative;
         width: 100%;
         height: 8px;
-        background: rgba(255, 255, 255, 0.1);
+        background: var(--timeline-track);
         border-radius: 4px;
         cursor: pointer;
       }
@@ -107,18 +149,18 @@
       .pill { padding: 8px 12px; border-radius: 999px; background: rgba(244,63,94,0.18); color: #fda4af; font-size: 0.95rem; }
 
       .grid { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 20px; }
-      .panel { background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 18px; padding: 18px; }
+      .panel { background: var(--panel-bg); border: 1px solid var(--border); border-radius: 18px; padding: 18px; }
       .controls { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
       input, select, button, textarea {
         font: inherit;
         border-radius: 999px;
         border: 1px solid var(--border);
         padding: 10px 12px;
-        background: rgba(255,255,255,0.04);
+        background: var(--input-bg);
         color: var(--text);
       }
-      button { background: linear-gradient(90deg, var(--accent), var(--accent-2)); border: none; cursor: pointer; font-weight: 700; }
-      .file-card, .video-card, .review-card { background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 16px; padding: 14px; margin-top: 12px; }
+      button { background: linear-gradient(90deg, var(--accent), var(--accent-2)); border: none; cursor: pointer; font-weight: 700; color: #fff; }
+      .file-card, .video-card, .review-card { background: var(--item-bg); border: 1px solid var(--border); border-radius: 16px; padding: 14px; margin-top: 12px; }
       .video-wrap { margin-top: 12px; }
       video { width: 100%; border-radius: 14px; background: black; cursor: pointer; }
       #videoMirrorWrap.mirrored { transform: scaleX(-1); }
@@ -128,18 +170,25 @@
       .chat-messages { max-height: 280px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; padding-right: 4px; }
       .chat-bubble { max-width: 82%; padding: 8px 12px; font-size: 0.9rem; line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
       .chat-bubble.user { align-self: flex-end; background: rgba(244,63,94,0.22); border-radius: 14px 14px 2px 14px; }
-      .chat-bubble.ai { align-self: flex-start; background: rgba(255,255,255,0.07); border-radius: 14px 14px 14px 2px; }
+      .chat-bubble.ai { align-self: flex-start; background: var(--chat-ai-bg); border-radius: 14px 14px 14px 2px; }
       .muted { color: var(--muted); }
       .row { display: flex; justify-content: space-between; gap: 10px; align-items: center; flex-wrap: wrap; }
       .small { font-size: 0.95rem; }
       .list { display: grid; gap: 10px; }
-      .item { padding: 12px; border-radius: 12px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); }
-      .item:hover { background: rgba(255,255,255,0.07); }
+      .item { padding: 12px; border-radius: 12px; background: var(--item-bg); border: 1px solid var(--border); }
+      .item:hover { background: var(--item-hover); }
       .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
       .danger { background: #dc2626; }
+      .theme-btn { position: fixed; top: 20px; right: 24px; z-index: 100; padding: 8px 14px; border-radius: 999px; font-size: 1rem; background: var(--card-bg); border: 1px solid var(--border) !important; color: var(--text); cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+      /* Icon is CSS-driven so it's correct before JS runs */
+      #themeBtn .i-dark { display: inline; }
+      #themeBtn .i-light { display: none; }
+      [data-theme="light"] #themeBtn .i-dark { display: none; }
+      [data-theme="light"] #themeBtn .i-light { display: inline; }
     </style>
   </head>
   <body>
+    <button class="theme-btn" onclick="toggleTheme()" id="themeBtn" title="Toggle light/dark mode">🌙</button>
     <div class="app">
       <div class="card hero">
         <div>
@@ -213,6 +262,8 @@
         chatHistory: [],
         currentChunk: 1,
         userContext: '',
+        songInfo: '',
+        savedReviews: [],
       };
 
       async function refreshVideos() {
@@ -275,6 +326,16 @@
             if (regenerateArea) regenerateArea.style.display = 'block';
           }
         } catch { /* history unavailable, start fresh */ }
+
+        // Load saved AI reviews for this video
+        try {
+          const revRes = await fetch(`/videos/${id}/saved-reviews`);
+          const savedReviews = await revRes.json();
+          state.savedReviews = Array.isArray(savedReviews) ? savedReviews : [];
+          // Restore songInfo from the most recent saved review if available
+          const latestSong = state.savedReviews.find((r) => r.reviewData?.songInfo)?.reviewData?.songInfo;
+          state.songInfo = latestSong || video.title || '';
+        } catch { state.savedReviews = []; state.songInfo = video.title || ''; }
         const playerPanel = document.getElementById('playerPanel');
         const reviewPanel = document.getElementById('reviewPanel');
 
@@ -282,6 +343,9 @@
           <div class="row">
             <h3>${video.title}</h3>
             <span class="small muted">${video.filename}</span>
+          </div>
+          <div style="margin: 6px 0 10px;">
+            <input id="songInfoInput" type="text" placeholder="🎵 Song name &amp; artist — e.g. Romeo Santos – Propuesta Indecente" style="width:100%; border-radius:10px; padding:7px 12px; font-size:0.9rem;" oninput="state.songInfo=this.value" />
           </div>
           <div id="loopIndicator" style="display: none; padding: 8px 12px; margin-bottom: 12px; background: rgba(244,63,94,0.2); border-left: 3px solid #f43f5e; border-radius: 6px;">
             <strong style="color: #fda4af;">🔄 Looping:</strong> <span id="loopTime"></span>
@@ -342,17 +406,25 @@
             <button onclick="toggleMirror()">Mirror</button>
           </div>
           <div class="small muted" style="margin-top: 6px; padding-left: 2px;">Shift+&lt; / Shift+&gt; to step speed</div>
-          <hr style="border: none; border-top: 1px solid var(--border); margin: 12px 0;">
-          <div style="margin-top: 12px;">
-            <strong>AI Review Setup</strong>
-            <div style="margin-top: 8px;">
-              <textarea id="userContextInput" rows="2" placeholder="Tell the AI about yourself: experience level, what to focus on, dance style preferences, known weaknesses…" style="width: 100%; border-radius: 12px; padding: 10px; background: rgba(255,255,255,0.04); color: var(--text); border: 1px solid var(--border); font: inherit; resize: vertical;"></textarea>
+          <hr style="border: none; border-top: 1px solid var(--border); margin: 16px 0;">
+          <div id="reviewSetup">
+            <div class="row" style="margin-bottom: 10px;">
+              <strong>🤖 AI Review</strong>
+              <span id="reviewRangePreview" class="small muted">Load a video to begin</span>
             </div>
-            <div class="actions" style="margin-top: 8px;">
-              <input id="aTimeInput" type="number" min="0" placeholder="A time (seconds)" value="0" style="max-width: 140px;" />
-              <input id="bTimeInput" type="number" min="0" placeholder="B time (seconds)" value="120" style="max-width: 140px;" />
-              <button onclick="startReview('${id}')">Start AI Review</button>
+            <textarea id="userContextInput" rows="2" placeholder="Optional: your profile — experience level, focus areas, known weaknesses…" style="width:100%; border-radius:10px; padding:8px 12px; background:var(--input-bg); color:var(--text); border:1px solid var(--border); font:inherit; resize:vertical; margin-bottom:10px;"></textarea>
+            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+              <button onclick="setReviewSection('entire')" id="reviewEntireBtn" style="flex:1;" disabled>📹 Entire Video</button>
+              <button onclick="setReviewSection('ab')" style="flex:1;">🎬 A-B Selection</button>
+              <button onclick="setReviewSection('current')" style="flex:1;">📍 From Here (+60s)</button>
             </div>
+            <div style="display:flex; gap:8px; align-items:center; margin-bottom:10px;">
+              <input id="aTimeInput" type="number" min="0" step="1" placeholder="Start (s)" value="0" oninput="updateReviewPreview()" style="flex:1; max-width:110px;" />
+              <span class="small muted">→</span>
+              <input id="bTimeInput" type="number" min="0" step="1" placeholder="End (s)" value="" oninput="updateReviewPreview()" style="flex:1; max-width:110px;" />
+              <span id="reviewChunkBadge" class="small muted" style="white-space:nowrap; font-size:0.85rem;"></span>
+            </div>
+            <button onclick="startReview('${id}')" id="startReviewBtn" style="width:100%; padding:12px; font-size:1rem; border-radius:14px;" disabled>🤖 Start AI Review</button>
           </div>
         `;
 
@@ -383,6 +455,12 @@
           initializeTimeline(videoEl);
           const durationEl = document.getElementById('durationDisplay');
           if (durationEl) durationEl.textContent = formatTime(videoEl.duration);
+          // Auto-default to entire video once duration is known
+          const bInp = document.getElementById('bTimeInput');
+          if (bInp && !bInp.value) bInp.value = String(Math.floor(videoEl.duration));
+          const reviewEntireBtn = document.getElementById('reviewEntireBtn');
+          if (reviewEntireBtn) reviewEntireBtn.disabled = false;
+          updateReviewPreview();
         });
 
         videoEl.addEventListener('timeupdate', () => {
@@ -394,6 +472,11 @@
         });
 
         reviewPanel.innerHTML = '<p class="muted">Drag the A and B handles on the timeline to select a loop section, then click "🔄 Loop A-B" to practice.</p>';
+        renderSavedReviews(id);
+
+        // Pre-fill song info field with stored or video title value
+        const songInput = document.getElementById('songInfoInput');
+        if (songInput && state.songInfo) songInput.value = state.songInfo;
       }
 
       function initializeTimeline(videoEl) {
@@ -511,12 +594,107 @@
         }
       }
 
+      function renderSavedReviews(videoId) {
+        const reviewPanel = document.getElementById('reviewPanel');
+        if (!reviewPanel) return;
+        const reviews = state.savedReviews || [];
+        if (!reviews.length) return;
+
+        // Group chunks by session (aTime + bTime pair)
+        const sessions = {};
+        reviews.forEach((r) => {
+          const key = `${r.aTime}-${r.bTime}`;
+          if (!sessions[key]) sessions[key] = { aTime: r.aTime, bTime: r.bTime, chunks: [], updatedAt: r.updatedAt };
+          sessions[key].chunks.push(r);
+          if (r.updatedAt > sessions[key].updatedAt) sessions[key].updatedAt = r.updatedAt;
+        });
+
+        const sessionList = Object.values(sessions).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+
+        const html = sessionList.map((s) => {
+          const chunkBtns = s.chunks
+            .sort((a, b) => a.chunkNumber - b.chunkNumber)
+            .map((c) => `<button onclick="loadSavedChunk('${videoId}',${c.chunkNumber},${s.aTime},${s.bTime})" style="padding:4px 10px;font-size:0.85rem;border-radius:8px;">Chunk ${c.chunkNumber}</button>`)
+            .join('');
+          const date = new Date(s.updatedAt).toLocaleDateString(undefined, { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
+          return `
+            <div style="padding:12px;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:12px;margin-bottom:8px;">
+              <div class="row" style="margin-bottom:8px;">
+                <strong>${formatTime(s.aTime)} \u2013 ${formatTime(s.bTime)}</strong>
+                <span class="small muted">${date}</span>
+              </div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;">${chunkBtns}</div>
+            </div>`;
+        }).join('');
+
+        reviewPanel.innerHTML = `
+          <div style="margin-bottom:12px;">
+            <div class="row">
+              <strong>\ud83d\udccb Saved AI Reviews</strong>
+              <span class="small muted">${sessionList.length} session${sessionList.length > 1 ? 's' : ''}</span>
+            </div>
+            <div style="margin-top:8px;">${html}</div>
+          </div>`;
+      }
+
+      async function loadSavedChunk(videoId, chunkNumber, aTime, bTime) {
+        state.reviewState = { videoId, aTime, bTime, totalChunks: state.savedReviews.filter(r => r.aTime === aTime && r.bTime === bTime).length, currentChunk: chunkNumber };
+        state.currentChunk = chunkNumber;
+        await loadChunk(videoId, chunkNumber, aTime, bTime);
+      }
+
+      function setReviewSection(mode) {
+        const videoEl = document.getElementById('videoPlayer');
+        const aInp = document.getElementById('aTimeInput');
+        const bInp = document.getElementById('bTimeInput');
+        if (!aInp || !bInp) return;
+        if (mode === 'entire') {
+          aInp.value = '0';
+          bInp.value = videoEl?.duration ? String(Math.floor(videoEl.duration)) : '';
+        } else if (mode === 'ab') {
+          aInp.value = String(Math.floor(parseFloat(document.getElementById('manualATime')?.value || '0')));
+          bInp.value = String(Math.ceil(parseFloat(document.getElementById('manualBTime')?.value || '10')));
+        } else if (mode === 'current' && videoEl) {
+          const from = Math.floor(videoEl.currentTime);
+          const to = videoEl.duration ? Math.min(from + 60, Math.floor(videoEl.duration)) : from + 60;
+          aInp.value = String(from);
+          bInp.value = String(to);
+        }
+        updateReviewPreview();
+      }
+
+      function updateReviewPreview() {
+        const a = parseFloat(document.getElementById('aTimeInput')?.value) || 0;
+        const b = parseFloat(document.getElementById('bTimeInput')?.value);
+        const preview = document.getElementById('reviewRangePreview');
+        const badge = document.getElementById('reviewChunkBadge');
+        const btn = document.getElementById('startReviewBtn');
+        if (!preview) return;
+        if (!b || b <= a) {
+          preview.textContent = b ? '⚠️ End must be after start' : 'Select a section';
+          if (badge) badge.textContent = '';
+          if (btn) btn.disabled = true;
+          return;
+        }
+        const chunks = Math.max(1, Math.ceil((b - a) / 15));
+        preview.textContent = `${formatTime(a)} → ${formatTime(b)}`;
+        if (badge) badge.textContent = `${chunks} chunk${chunks > 1 ? 's' : ''} · ${Math.round(b - a)}s`;
+        if (btn) btn.disabled = false;
+      }
+
       async function startReview(videoId) {
         const aTime = parseFloat(document.getElementById('aTimeInput').value) || 0;
-        const bTime = parseFloat(document.getElementById('bTimeInput').value) || 30;
+        const bTime = parseFloat(document.getElementById('bTimeInput').value);
 
         const reviewPanel = document.getElementById('reviewPanel');
-        reviewPanel.innerHTML = '<p class="muted">Initializing review...</p>';
+
+        if (!bTime || bTime <= aTime) {
+          reviewPanel.innerHTML = '<p class="muted" style="color:#fb923c;">\u26a0\ufe0f Set a valid end time greater than the start time.</p>';
+          return;
+        }
+
+        const chunks = Math.max(1, Math.ceil((bTime - aTime) / 15));
+        reviewPanel.innerHTML = `<p class="muted">⏳ Starting AI review of ${formatTime(aTime)}–${formatTime(bTime)} (${chunks} chunk${chunks > 1 ? 's' : ''})…</p>`;
 
         try {
           const response = await fetch(`/videos/${videoId}/review/start`, {
@@ -528,6 +706,8 @@
           if (!response.ok) throw new Error('Failed to start review');
           const reviewData = await response.json();
 
+          if (reviewData.error) throw new Error(reviewData.error);
+
           state.reviewState = {
             videoId,
             aTime,
@@ -536,10 +716,11 @@
             currentChunk: 1,
           };
           state.userContext = document.getElementById('userContextInput')?.value?.trim() || '';
+          // songInfo is already live in state via oninput handler
 
           await loadChunk(videoId, 1, aTime, bTime);
         } catch (error) {
-          reviewPanel.innerHTML = '<p class="muted">Failed to start review. Try again.</p>';
+          reviewPanel.innerHTML = `<p class="muted" style="color:#ef4444;">❌ Failed to start review: ${error instanceof Error ? error.message : 'unknown error'}. Try again.</p>`;
         }
       }
 
@@ -550,7 +731,8 @@
 
         try {
           const ctx = state.userContext ? `&userContext=${encodeURIComponent(state.userContext)}` : '';
-          const response = await fetch(`/videos/${videoId}/review/chunk/${chunkNumber}?aTime=${aTime}&bTime=${bTime}${ctx}`);
+          const song = state.songInfo ? `&songInfo=${encodeURIComponent(state.songInfo)}` : '';
+          const response = await fetch(`/videos/${videoId}/review/chunk/${chunkNumber}?aTime=${aTime}&bTime=${bTime}${ctx}${song}`);
           if (!response.ok) throw new Error('Chunk unavailable');
           const data = await response.json();
           renderReviewPanel(videoId, data);
@@ -581,6 +763,7 @@
 
         reviewPanel.innerHTML = `
           <h3>AI Coaching — Chunk ${data.chunkNumber} of ${data.totalChunks}${cachedBadge}</h3>
+          ${data.songInfo ? `<p style="margin:4px 0 8px;"><span style="font-size:0.85rem;padding:3px 10px;border-radius:999px;background:rgba(251,146,60,0.15);color:#fb923c;">🎵 ${data.songInfo}</span></p>` : ''}
           <p><strong>Time:</strong> ${formatTime(data.chunkStartTime)}–${formatTime(data.chunkEndTime)} (${Math.round(data.chunkDuration)}s)</p>
           <p><strong>Source:</strong> ${data.analysisSource || 'heuristic'}</p>
           <p><strong>Summary:</strong> ${data.summary}</p>
@@ -769,6 +952,56 @@
         return id;
       }
 
+      function buildReviewContext() {
+        const video = state.videos.find((v) => v.id === state.selectedVideoId);
+        const videoEl = document.getElementById('videoPlayer');
+        const parts = [];
+        if (video) parts.push(`Video: "${video.title}"`);
+        if (videoEl && videoEl.duration) {
+          parts.push(`Time: ${formatTime(videoEl.currentTime)} / ${formatTime(videoEl.duration)}`);
+          parts.push(`Speed: ${videoEl.playbackRate}x`);
+        }
+        if (state.reviewState) {
+          parts.push(`Review: ${formatTime(state.reviewState.aTime)}–${formatTime(state.reviewState.bTime)}, chunk ${state.currentChunk}/${state.reviewState.totalChunks}`);
+        }
+        if (state.userContext) parts.push(`Dancer profile: ${state.userContext}`);
+        if (state.songInfo) parts.push(`Song: ${state.songInfo}`);
+        return parts.join('. ');
+      }
+
+      async function executeActions(actions) {
+        for (const action of actions) {
+          const videoEl = document.getElementById('videoPlayer');
+          switch (action.type) {
+            case 'regenerate':
+              await regenerateWithFeedback(action.feedback);
+              break;
+            case 'seek':
+              if (videoEl && videoEl.duration)
+                videoEl.currentTime = Math.max(0, Math.min(videoEl.duration, action.time));
+              break;
+            case 'loop':
+              if (typeof action.start === 'number' && typeof action.end === 'number')
+                loopSegment(action.start, action.end);
+              break;
+            case 'stopLoop':
+              stopLooping();
+              break;
+            case 'setSpeed': {
+              if (typeof action.rate === 'number') {
+                const snapped = SPEED_STEPS.reduce((p, c) =>
+                  Math.abs(c - action.rate) < Math.abs(p - action.rate) ? c : p);
+                setPlaybackRate(snapped);
+              }
+              break;
+            }
+            case 'mirror':
+              toggleMirror();
+              break;
+          }
+        }
+      }
+
       function updateChatBubble(id, text) {
         const el = document.getElementById(id);
         if (el) el.textContent = text;
@@ -788,10 +1021,7 @@
         appendChatBubble('user', message);
         const typingId = appendChatBubble('ai', '…');
 
-        let reviewContext = null;
-        if (state.reviewState) {
-          reviewContext = `Video section reviewed: ${state.reviewState.aTime}s\u2013${state.reviewState.bTime}s`;
-        }
+        const reviewContext = buildReviewContext();
 
         if (state.reviewState) {
           const area = document.getElementById('regenerateArea');
@@ -802,7 +1032,7 @@
           const res = await fetch(`/videos/${state.selectedVideoId}/chat`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message, history: state.chatHistory.slice(0, -1), reviewContext }),
+            body: JSON.stringify({ message, reviewContext }),
           });
           const data = await res.json();
           const reply = data.reply || 'No response from coach.';
@@ -815,7 +1045,7 @@
               data.actions.forEach((a) => {
                 const chip = document.createElement('span');
                 chip.style.cssText = 'font-size:0.78rem;padding:2px 7px;border-radius:999px;background:rgba(255,255,255,0.12);color:var(--muted);';
-                const labels = { regenerate:'🔄 Regenerated', seek:`⏩ Seek ${a.time}s`, loop:`🔁 Loop ${a.start}s–${a.end}s`, stopLoop:'⏹ Stop loop', setSpeed:`⚡ ${a.rate}x`, mirror:'🪞 Mirror' };
+                const labels = { regenerate:'\ud83d\udd04 Regenerated', seek:`\u23e9 Seek ${a.time}s`, loop:`\ud83d\udd01 Loop ${a.start}s\u2013${a.end}s`, stopLoop:'\u23f9 Stop loop', setSpeed:`\u26a1 ${a.rate}x`, mirror:'\ud83e\ude9e Mirror' };
                 chip.textContent = labels[a.type] || a.type;
                 chips.appendChild(chip);
               });
@@ -824,8 +1054,8 @@
             await executeActions(data.actions);
           }
           state.chatHistory.push({ role: 'assistant', content: reply });
-        } catch {
-          updateChatBubble(typingId, 'Could not reach the AI coach. Please try again.');
+        } catch (err) {
+          updateChatBubble(typingId, `Error: ${err instanceof Error ? err.message : 'Could not reach the AI coach'}. Please try again.`);
         }
       }
 
@@ -862,6 +1092,7 @@
               chunkNumber: state.currentChunk,
               feedback: userMessages,
               userContext: state.userContext || undefined,
+              songInfo: state.songInfo || undefined,
             }),
           });
           const data = await res.json();
@@ -989,6 +1220,25 @@
           uploadStatus.textContent = 'Upload failed. Please try again.';
         }
       });
+
+      // Theme management — runs before first paint
+      (function() {
+        const saved = localStorage.getItem('theme');
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const theme = saved || (prefersDark ? 'dark' : 'light');
+        if (theme === 'light') document.documentElement.setAttribute('data-theme', 'light');
+        const btn = document.getElementById('themeBtn');
+        if (btn) btn.textContent = theme === 'light' ? '🌙' : '☀️';
+      })();
+
+      function toggleTheme() {
+        const current = document.documentElement.getAttribute('data-theme');
+        const next = current === 'light' ? 'dark' : 'light';
+        if (next === 'light') document.documentElement.setAttribute('data-theme', 'light');
+        else document.documentElement.removeAttribute('data-theme');
+        localStorage.setItem('theme', next);
+        document.getElementById('themeBtn').textContent = next === 'light' ? '🌙' : '☀️';
+      }
 
       refreshVideos();
     </script>

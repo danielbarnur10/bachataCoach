@@ -81,14 +81,14 @@ export class VideosController {
   @Post(':id/review/regenerate')
   async regenerateReview(
     @Param('id') id: string,
-    @Body() body: { aTime?: number; bTime?: number; chunkNumber?: number; feedback?: string; userContext?: string },
+    @Body() body: { aTime?: number; bTime?: number; chunkNumber?: number; feedback?: string; userContext?: string; songInfo?: string },
   ) {
     const video = await this.videoRepository.getById(id);
     if (!video) return { error: 'Video not found' };
     const aTime = body.aTime ?? 0;
     const bTime = body.bTime ?? 120;
     const chunkNumber = Math.max(1, body.chunkNumber ?? 1);
-    return this.buildChunkReview(video, aTime, bTime, chunkNumber, body.feedback, body.userContext, true);
+    return this.buildChunkReview(video, aTime, bTime, chunkNumber, body.feedback, body.userContext, true, body.songInfo);
   }
 
   @Post(':id/chat')
@@ -128,13 +128,14 @@ export class VideosController {
     @Query('bTime') bTimeStr?: string,
     @Param('chunkNumber') chunkNumberStr?: string,
     @Query('userContext') userContext?: string,
+    @Query('songInfo') songInfo?: string,
   ) {
     const video = await this.videoRepository.getById(id);
     if (!video) return { error: 'Video not found' };
     const aTime = parseFloat(aTimeStr || '0') || 0;
     const bTime = parseFloat(bTimeStr || '120') || 120;
     const chunkNumber = Math.max(1, parseInt(chunkNumberStr || '1', 10));
-    return this.buildChunkReview(video, aTime, bTime, chunkNumber, undefined, userContext, false);
+    return this.buildChunkReview(video, aTime, bTime, chunkNumber, undefined, userContext, false, songInfo);
   }
 
   @Get(':id/saved-reviews')
@@ -142,7 +143,7 @@ export class VideosController {
     return this.savedReviewService.findAllForVideo(id);
   }
 
-  private async buildChunkReview(video: any, aTime: number, bTime: number, chunkNumber: number, userFeedback?: string, userContext?: string, forceRegenerate = false) {
+  private async buildChunkReview(video: any, aTime: number, bTime: number, chunkNumber: number, userFeedback?: string, userContext?: string, forceRegenerate = false, songInfo?: string) {
     const chunkStart = aTime + (chunkNumber - 1) * this.CHUNK_DURATION_SECONDS;
     const chunkEnd = Math.min(bTime, chunkStart + this.CHUNK_DURATION_SECONDS);
 
@@ -161,7 +162,9 @@ export class VideosController {
     }
 
     try {
-      const effectiveContext = userContext ?? (await this.savedReviewService.find(video.id, aTime, bTime, chunkNumber))?.userContext ?? undefined;
+      const cached = await this.savedReviewService.find(video.id, aTime, bTime, chunkNumber);
+      const effectiveContext = userContext ?? cached?.userContext ?? undefined;
+      const effectiveSongInfo = songInfo ?? (cached?.reviewData as any)?.songInfo ?? undefined;
       const review = await Promise.race([
         this.reviewService.reviewVideo(video.title, {
           durationSeconds: chunkDurationSeconds,
@@ -170,6 +173,7 @@ export class VideosController {
           movementScore: this.estimateMovementScore(video),
           userFeedback,
           userContext: effectiveContext,
+          songInfo: effectiveSongInfo,
         }),
         new Promise((_, reject) =>
           setTimeout(() => reject(new Error('AI analysis timeout')), 45000)
@@ -203,6 +207,7 @@ export class VideosController {
         hasNextChunk,
         nextChunkLabel: hasNextChunk ? `Next (${this.formatTime(chunkEnd)} – ${this.formatTime(Math.min(bTime, chunkEnd + this.CHUNK_DURATION_SECONDS))})` : 'Review complete',
         prompt: `Chunk ${chunkNumber} of ${totalChunks}${hasNextChunk ? ' — tap Next to continue' : ' — review complete'}`,
+        songInfo: effectiveSongInfo,
       };
       // Persist so subsequent requests return instantly
       await this.savedReviewService.upsert(video.id, aTime, bTime, chunkNumber, result, userContext);

@@ -23,6 +23,7 @@ export interface ReviewContext {
   movementScore?: number;
   userFeedback?: string;
   userContext?: string;
+  songInfo?: string;
 }
 
 export interface ChatMessage {
@@ -53,7 +54,7 @@ export class VideoReviewService {
 
     if (this.modelApiKey) {
       try {
-        return await this.reviewWithAi(title, durationSeconds, audioBeatCount, movementScore, context.userFeedback, context.userContext);
+        return await this.reviewWithAi(title, durationSeconds, audioBeatCount, movementScore, context.userFeedback, context.userContext, context.songInfo);
       } catch (error) {
         console.warn('AI review unavailable, falling back to heuristic analysis.', error);
       }
@@ -62,13 +63,17 @@ export class VideoReviewService {
     return this.reviewWithHeuristics(title, durationSeconds, audioBeatCount, movementScore);
   }
 
-  private async reviewWithAi(title: string, durationSeconds: number, audioBeatCount: number, movementScore: number, userFeedback?: string, userContext?: string): Promise<VideoReviewResult> {
+  private async reviewWithAi(title: string, durationSeconds: number, audioBeatCount: number, movementScore: number, userFeedback?: string, userContext?: string, songInfo?: string): Promise<VideoReviewResult> {
     const feedbackSection = userFeedback?.trim()
       ? `\n\nIMPORTANT \u2014 DANCER CORRECTION: The dancer provided this feedback on the previous analysis:\n"${userFeedback}"\nAdjust your observations specifically to address this correction.`
       : '';
 
     const userContextSection = userContext?.trim()
       ? `\n\nDANCER PROFILE & PREFERENCES:\n${userContext}\nTailor your analysis and tips to this dancer.`
+      : '';
+
+    const songSection = songInfo?.trim()
+      ? `\n\nSONG IDENTIFICATION:\nThe dancer is practicing to: "${songInfo}"\nUsing your knowledge of this song/artist:\n- Identify the bachata subgenre (Sensual / Urban / Traditional / Fusion / Moderno)\n- Reference the typical BPM, energy, and emotional tone for this specific song\n- Note key structural moments (when does the Mambo hit? where is the Majao section?)\n- Tailor ALL rhythmic observations to this song's specific feel — e.g. a sensual Romeo Santos track demands different body expression than a traditional Frank Reyes or an urban Aventura cut.`
       : '';
 
     const prompt = `You are a bachata musicality and rhythm coach. Analyze this dance clip ONLY for timing, rhythm, and musicality. Ignore posture, aesthetics, or partnership unless directly related to rhythm.
@@ -96,7 +101,7 @@ For each segment, identify:
 Example segment:
 {"startTime": 0, "endTime": 3, "label": "Derecho opening", "reason": "Step timing is 80ms late on count 1, but recovers by count 5 - good recovery"}
 
-Focus ONLY on rhythm, timing, and musicality. Ignore everything else.${userContextSection}${feedbackSection}`;
+Focus ONLY on rhythm, timing, and musicality. Ignore everything else.${songSection}${userContextSection}${feedbackSection}`;
 
     const response = await fetch(this.buildChatUrl(), {
       method: 'POST',
