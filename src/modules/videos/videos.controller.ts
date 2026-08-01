@@ -13,6 +13,8 @@ import ytdl from 'ytdl-core';
 import { VideoEntity } from './video.entity';
 import { InMemoryVideoRepository } from './in-memory-video.repository';
 import { VideoReviewService } from './video-review.service';
+import { ChatHistoryService } from './chat-history.service';
+import { SavedReviewService } from './saved-review.service';
 
 const execAsync = promisify(exec);
 
@@ -25,6 +27,8 @@ export class VideosController {
   constructor(
     private readonly videoRepository: InMemoryVideoRepository,
     private readonly reviewService: VideoReviewService,
+    private readonly chatHistoryService: ChatHistoryService,
+    private readonly savedReviewService: SavedReviewService,
   ) {
     if (!existsSync(this.uploadDir)) {
       mkdirSync(this.uploadDir, { recursive: true });
@@ -77,30 +81,44 @@ export class VideosController {
   @Post(':id/review/regenerate')
   async regenerateReview(
     @Param('id') id: string,
-    @Body() body: { aTime?: number; bTime?: number; chunkNumber?: number; feedback?: string },
+    @Body() body: { aTime?: number; bTime?: number; chunkNumber?: number; feedback?: string; userContext?: string },
   ) {
     const video = await this.videoRepository.getById(id);
     if (!video) return { error: 'Video not found' };
     const aTime = body.aTime ?? 0;
     const bTime = body.bTime ?? 120;
     const chunkNumber = Math.max(1, body.chunkNumber ?? 1);
-    return this.buildChunkReview(video, aTime, bTime, chunkNumber, body.feedback);
+    return this.buildChunkReview(video, aTime, bTime, chunkNumber, body.feedback, body.userContext, true);
   }
 
   @Post(':id/chat')
   async chat(
     @Param('id') id: string,
-    @Body() body: { message?: string; history?: Array<{ role: string; content: string }>; reviewContext?: string },
+    @Body() body: { message?: string; reviewContext?: string },
   ) {
     if (!body.message?.trim()) {
       return { error: 'Message is required' };
     }
     try {
-      const reply = await this.reviewService.chat(body.message, body.history ?? [], body.reviewContext);
-      return { reply };
+      const previousHistory = await this.chatHistoryService.getHistory(id);
+      const result = await this.reviewService.chat(body.message, previousHistory, body.reviewContext);
+      await this.chatHistoryService.saveMessage(id, 'user', body.message);
+      await this.chatHistoryService.saveMessage(id, 'assistant', result.reply, result.actions);
+      return { reply: result.reply, actions: result.actions };
     } catch (error) {
-      return { reply: 'Sorry, there was an error reaching the AI coach. Please try again.' };
+      return { reply: 'Sorry, there was an error reaching the AI coach. Please try again.', actions: [] };
     }
+  }
+
+  @Get(':id/chat/history')
+  async getChatHistory(@Param('id') id: string) {
+    return this.chatHistoryService.getHistory(id);
+  }
+
+  @Delete(':id/chat/history')
+  async clearChatHistory(@Param('id') id: string) {
+    await this.chatHistoryService.clearHistory(id);
+    return { success: true };
   }
 
   @Get(':id/review/chunk/:chunkNumber')
@@ -109,16 +127,22 @@ export class VideosController {
     @Query('aTime') aTimeStr?: string,
     @Query('bTime') bTimeStr?: string,
     @Param('chunkNumber') chunkNumberStr?: string,
+    @Query('userContext') userContext?: string,
   ) {
     const video = await this.videoRepository.getById(id);
     if (!video) return { error: 'Video not found' };
     const aTime = parseFloat(aTimeStr || '0') || 0;
     const bTime = parseFloat(bTimeStr || '120') || 120;
     const chunkNumber = Math.max(1, parseInt(chunkNumberStr || '1', 10));
-    return this.buildChunkReview(video, aTime, bTime, chunkNumber);
+    return this.buildChunkReview(video, aTime, bTime, chunkNumber, undefined, userContext, false);
   }
 
-  private async buildChunkReview(video: any, aTime: number, bTime: number, chunkNumber: number, userFeedback?: string) {
+  @Get(':id/saved-reviews')
+  async listSavedReviews(@Param('id') id: string) {
+    return this.savedReviewService.findAllForVideo(id);
+  }
+
+  private async buildChunkReview(video: any, aTime: number, bTime: number, chunkNumber: number, userFeedback?: string, userContext?: string, forceRegenerate = false) {
     const chunkStart = aTime + (chunkNumber - 1) * this.CHUNK_DURATION_SECONDS;
     const chunkEnd = Math.min(bTime, chunkStart + this.CHUNK_DURATION_SECONDS);
 
@@ -128,7 +152,16 @@ export class VideosController {
     const totalChunks = Math.max(1, Math.ceil((bTime - aTime) / this.CHUNK_DURATION_SECONDS));
     const hasNextChunk = chunkNumber < totalChunks;
 
+    // Return cached review if not forcing regeneration
+    if (!forceRegenerate && !userFeedback) {
+      const saved = await this.savedReviewService.find(video.id, aTime, bTime, chunkNumber);
+      if (saved) {
+        return { ...(saved.reviewData as object), cached: true, cachedAt: saved.updatedAt };
+      }
+    }
+
     try {
+      const effectiveContext = userContext ?? (await this.savedReviewService.find(video.id, aTime, bTime, chunkNumber))?.userContext ?? undefined;
       const review = await Promise.race([
         this.reviewService.reviewVideo(video.title, {
           durationSeconds: chunkDurationSeconds,
@@ -136,6 +169,7 @@ export class VideosController {
           audioBeatCount: this.estimateBeatCount(video),
           movementScore: this.estimateMovementScore(video),
           userFeedback,
+          userContext: effectiveContext,
         }),
         new Promise((_, reject) =>
           setTimeout(() => reject(new Error('AI analysis timeout')), 45000)
@@ -156,7 +190,7 @@ export class VideosController {
         }));
       }
 
-      return {
+      const result = {
         ...review,
         segments,
         chunkNumber,
@@ -170,6 +204,9 @@ export class VideosController {
         nextChunkLabel: hasNextChunk ? `Next (${this.formatTime(chunkEnd)} – ${this.formatTime(Math.min(bTime, chunkEnd + this.CHUNK_DURATION_SECONDS))})` : 'Review complete',
         prompt: `Chunk ${chunkNumber} of ${totalChunks}${hasNextChunk ? ' — tap Next to continue' : ' — review complete'}`,
       };
+      // Persist so subsequent requests return instantly
+      await this.savedReviewService.upsert(video.id, aTime, bTime, chunkNumber, result, userContext);
+      return result;
     } catch (error) {
       console.error('Error analyzing chunk:', error);
       return {

@@ -19,10 +19,20 @@ function makeController(repoOverrides: any = {}, serviceOverrides: any = {}) {
   };
   const reviewService = {
     reviewVideo: jest.fn().mockResolvedValue(defaultReview),
-    chat: jest.fn().mockResolvedValue('Great!'),
+    chat: jest.fn().mockResolvedValue({ reply: 'Great!', actions: [] }),
     ...serviceOverrides,
   };
-  return { controller: new VideosController(repository as any, reviewService as any), repository, reviewService };
+  const chatHistoryService = {
+    getHistory: jest.fn().mockResolvedValue([]),
+    saveMessage: jest.fn().mockResolvedValue(undefined),
+    clearHistory: jest.fn().mockResolvedValue(undefined),
+  };
+  const savedReviewService = {
+    find: jest.fn().mockResolvedValue(null),
+    findAllForVideo: jest.fn().mockResolvedValue([]),
+    upsert: jest.fn().mockResolvedValue(undefined),
+  };
+  return { controller: new VideosController(repository as any, reviewService as any, chatHistoryService as any, savedReviewService as any), repository, reviewService, chatHistoryService, savedReviewService };
 }
 
 // ─── estimateDurationSecondsFromBytes ────────────────────────────────────────
@@ -215,22 +225,39 @@ describe('VideosController.chat', () => {
 
   it('delegates to reviewService.chat and wraps the reply', async () => {
     const { controller, reviewService } = makeController();
-    (reviewService.chat as jest.Mock).mockResolvedValue('Great timing!');
-    const result = await controller.chat('v1', { message: 'How is my timing?' });
-    expect(result).toEqual({ reply: 'Great timing!' });
+    (reviewService.chat as jest.Mock).mockResolvedValue({ reply: 'Great timing!', actions: [] });
+    const result = await controller.chat('v1', { message: 'How is my timing?' }) as any;
+    expect(result.reply).toBe('Great timing!');
+    expect(result.actions).toEqual([]);
   });
 
-  it('forwards history and reviewContext to reviewService', async () => {
+  it('includes actions in the response', async () => {
     const { controller, reviewService } = makeController();
-    const history = [{ role: 'user', content: 'previous' }];
-    await controller.chat('v1', { message: 'Question', history, reviewContext: '0s–30s' });
-    expect(reviewService.chat).toHaveBeenCalledWith('Question', history, '0s–30s');
+    const actions = [{ type: 'seek', time: 30 }];
+    (reviewService.chat as jest.Mock).mockResolvedValue({ reply: 'Jump to 0:30', actions });
+    const result = await controller.chat('v1', { message: 'Go to 30s' }) as any;
+    expect(result.actions).toEqual(actions);
   });
 
-  it('passes empty array for missing history', async () => {
-    const { controller, reviewService } = makeController();
+  it('uses server-side history from chatHistoryService', async () => {
+    const { controller, reviewService, chatHistoryService } = makeController();
+    const history = [{ role: 'user' as const, content: 'prev', timestamp: '2026-01-01T00:00:00.000Z' }];
+    (chatHistoryService.getHistory as jest.Mock).mockResolvedValue(history);
+    await controller.chat('v1', { message: 'New question' });
+    expect(reviewService.chat).toHaveBeenCalledWith('New question', history, undefined);
+  });
+
+  it('saves user message and assistant reply after successful chat', async () => {
+    const { controller, chatHistoryService } = makeController();
     await controller.chat('v1', { message: 'Hello' });
-    expect(reviewService.chat).toHaveBeenCalledWith('Hello', [], undefined);
+    expect(chatHistoryService.saveMessage).toHaveBeenCalledWith('v1', 'user', 'Hello');
+    expect(chatHistoryService.saveMessage).toHaveBeenCalledWith('v1', 'assistant', expect.any(String), expect.any(Array));
+  });
+
+  it('passes reviewContext to reviewService', async () => {
+    const { controller, reviewService } = makeController();
+    await controller.chat('v1', { message: 'Question', reviewContext: '0s–30s' });
+    expect(reviewService.chat).toHaveBeenCalledWith('Question', expect.any(Array), '0s–30s');
   });
 
   it('returns a fallback reply when reviewService throws', async () => {

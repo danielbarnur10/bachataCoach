@@ -6,3 +6,5 @@ export { FeedbackItemEntity } from './feedback-item.entity';
 export { SavedLoopEntity } from './saved-loop.entity';
 export { CoachPlanEntity } from './coach-plan.entity';
 export { ProcessingJobEntity } from './processing-job.entity';
+export { ChatMessageEntity } from './chat-message.entity';
+export { SavedReviewEntity } from './saved-review.entity';

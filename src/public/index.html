@@ -186,7 +186,10 @@
             <p class="muted">AI feedback will appear here after upload.</p>
           </div>
           <div id="chatPanel" class="review-card" style="margin-top: 12px;">
-            <h3 style="margin: 0 0 8px 0; font-size: 1rem;">💬 Coach Chat</h3>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <h3 style="margin: 0; font-size: 1rem;">💬 Coach Chat</h3>
+              <button onclick="clearChatHistory()" style="padding: 4px 10px; font-size: 0.8rem; background: #dc2626; border-radius: 8px;">🗑 Clear All</button>
+            </div>
             <p class="small muted" style="margin: 0 0 10px 0;">Correct the AI or ask questions — e.g. "the energy was more sensual, not aggressive"</p>
             <div id="regenerateArea" style="display: none; margin-bottom: 10px;">
               <button onclick="regenerateWithFeedback()" style="width: 100%;">🔄 Regenerate Review with My Feedback</button>
@@ -209,6 +212,7 @@
         reviewState: null,
         chatHistory: [],
         currentChunk: 1,
+        userContext: '',
       };
 
       async function refreshVideos() {
@@ -260,6 +264,17 @@
         document.getElementById('chatMessages').innerHTML = '';
         const regenerateArea = document.getElementById('regenerateArea');
         if (regenerateArea) regenerateArea.style.display = 'none';
+
+        // Load saved chat history for this video
+        try {
+          const histRes = await fetch(`/videos/${id}/chat/history`);
+          const saved = await histRes.json();
+          if (Array.isArray(saved) && saved.length) {
+            saved.forEach((m) => appendChatBubble(m.role === 'user' ? 'user' : 'ai', m.content, m.actions));
+            state.chatHistory = saved.map((m) => ({ role: m.role, content: m.content }));
+            if (regenerateArea) regenerateArea.style.display = 'block';
+          }
+        } catch { /* history unavailable, start fresh */ }
         const playerPanel = document.getElementById('playerPanel');
         const reviewPanel = document.getElementById('reviewPanel');
 
@@ -329,10 +344,13 @@
           <div class="small muted" style="margin-top: 6px; padding-left: 2px;">Shift+&lt; / Shift+&gt; to step speed</div>
           <hr style="border: none; border-top: 1px solid var(--border); margin: 12px 0;">
           <div style="margin-top: 12px;">
-            <strong>AI Review (Optional)</strong>
+            <strong>AI Review Setup</strong>
+            <div style="margin-top: 8px;">
+              <textarea id="userContextInput" rows="2" placeholder="Tell the AI about yourself: experience level, what to focus on, dance style preferences, known weaknesses…" style="width: 100%; border-radius: 12px; padding: 10px; background: rgba(255,255,255,0.04); color: var(--text); border: 1px solid var(--border); font: inherit; resize: vertical;"></textarea>
+            </div>
             <div class="actions" style="margin-top: 8px;">
-              <input id="aTimeInput" type="number" min="0" placeholder="A time (seconds)" value="0" style="max-width: 150px;" />
-              <input id="bTimeInput" type="number" min="0" placeholder="B time (seconds)" value="120" style="max-width: 150px;" />
+              <input id="aTimeInput" type="number" min="0" placeholder="A time (seconds)" value="0" style="max-width: 140px;" />
+              <input id="bTimeInput" type="number" min="0" placeholder="B time (seconds)" value="120" style="max-width: 140px;" />
               <button onclick="startReview('${id}')">Start AI Review</button>
             </div>
           </div>
@@ -517,6 +535,7 @@
             totalChunks: reviewData.totalChunks,
             currentChunk: 1,
           };
+          state.userContext = document.getElementById('userContextInput')?.value?.trim() || '';
 
           await loadChunk(videoId, 1, aTime, bTime);
         } catch (error) {
@@ -530,7 +549,8 @@
         reviewPanel.innerHTML = '<p class="muted">Loading chunk...</p>';
 
         try {
-          const response = await fetch(`/videos/${videoId}/review/chunk/${chunkNumber}?aTime=${aTime}&bTime=${bTime}`);
+          const ctx = state.userContext ? `&userContext=${encodeURIComponent(state.userContext)}` : '';
+          const response = await fetch(`/videos/${videoId}/review/chunk/${chunkNumber}?aTime=${aTime}&bTime=${bTime}${ctx}`);
           if (!response.ok) throw new Error('Chunk unavailable');
           const data = await response.json();
           renderReviewPanel(videoId, data);
@@ -554,10 +574,13 @@
           )
           .join('');
 
+        const cachedBadge = data.cached
+          ? `<span style="display:inline-block;margin-left:8px;font-size:0.8rem;padding:2px 8px;border-radius:999px;background:rgba(16,185,129,0.15);color:#10b981;">📋 Cached · ${new Date(data.cachedAt).toLocaleDateString()}</span>`
+          : '';
         const nextButton = data.hasNextChunk ? `<button onclick="loadChunk('${videoId}', ${data.chunkNumber + 1}, ${data.aTime}, ${data.bTime})">Next: ${data.nextChunkLabel}</button>` : '<p><strong>Review complete for this section!</strong></p>';
 
         reviewPanel.innerHTML = `
-          <h3>AI Coaching — Chunk ${data.chunkNumber} of ${data.totalChunks}</h3>
+          <h3>AI Coaching — Chunk ${data.chunkNumber} of ${data.totalChunks}${cachedBadge}</h3>
           <p><strong>Time:</strong> ${formatTime(data.chunkStartTime)}–${formatTime(data.chunkEndTime)} (${Math.round(data.chunkDuration)}s)</p>
           <p><strong>Source:</strong> ${data.analysisSource || 'heuristic'}</p>
           <p><strong>Summary:</strong> ${data.summary}</p>
@@ -721,7 +744,7 @@
         if (videoEl.volume > 0) videoEl.muted = false;
       }
 
-      function appendChatBubble(role, text) {
+      function appendChatBubble(role, text, actions) {
         const id = 'msg-' + Date.now() + '-' + Math.random().toString(36).slice(2);
         const messages = document.getElementById('chatMessages');
         if (!messages) return id;
@@ -729,6 +752,18 @@
         div.id = id;
         div.className = `chat-bubble ${role === 'user' ? 'user' : 'ai'}`;
         div.textContent = text;
+        if (actions && actions.length) {
+          const chips = document.createElement('div');
+          chips.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;';
+          actions.forEach((a) => {
+            const chip = document.createElement('span');
+            chip.style.cssText = 'font-size:0.78rem;padding:2px 7px;border-radius:999px;background:rgba(255,255,255,0.12);color:var(--muted);';
+            const labels = { regenerate:'🔄 Regenerated', seek:`⏩ Seek ${a.time}s`, loop:`🔁 Loop ${a.start}s–${a.end}s`, stopLoop:'⏹ Stop loop', setSpeed:`⚡ ${a.rate}x`, mirror:'🪞 Mirror' };
+            chip.textContent = labels[a.type] || a.type;
+            chips.appendChild(chip);
+          });
+          div.appendChild(chips);
+        }
         messages.appendChild(div);
         messages.scrollTop = messages.scrollHeight;
         return id;
@@ -772,10 +807,35 @@
           const data = await res.json();
           const reply = data.reply || 'No response from coach.';
           updateChatBubble(typingId, reply);
+          if (data.actions?.length) {
+            const bubble = document.getElementById(typingId);
+            if (bubble) {
+              const chips = document.createElement('div');
+              chips.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;';
+              data.actions.forEach((a) => {
+                const chip = document.createElement('span');
+                chip.style.cssText = 'font-size:0.78rem;padding:2px 7px;border-radius:999px;background:rgba(255,255,255,0.12);color:var(--muted);';
+                const labels = { regenerate:'🔄 Regenerated', seek:`⏩ Seek ${a.time}s`, loop:`🔁 Loop ${a.start}s–${a.end}s`, stopLoop:'⏹ Stop loop', setSpeed:`⚡ ${a.rate}x`, mirror:'🪞 Mirror' };
+                chip.textContent = labels[a.type] || a.type;
+                chips.appendChild(chip);
+              });
+              bubble.appendChild(chips);
+            }
+            await executeActions(data.actions);
+          }
           state.chatHistory.push({ role: 'assistant', content: reply });
         } catch {
           updateChatBubble(typingId, 'Could not reach the AI coach. Please try again.');
         }
+      }
+
+      async function clearChatHistory() {
+        if (!state.selectedVideoId) return;
+        await fetch(`/videos/${state.selectedVideoId}/chat/history`, { method: 'DELETE' });
+        state.chatHistory = [];
+        document.getElementById('chatMessages').innerHTML = '';
+        const area = document.getElementById('regenerateArea');
+        if (area) area.style.display = 'none';
       }
 
       async function regenerateWithFeedback() {
@@ -801,6 +861,7 @@
               bTime: state.reviewState.bTime,
               chunkNumber: state.currentChunk,
               feedback: userMessages,
+              userContext: state.userContext || undefined,
             }),
           });
           const data = await res.json();

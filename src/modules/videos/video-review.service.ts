@@ -22,7 +22,23 @@ export interface ReviewContext {
   audioBeatCount?: number;
   movementScore?: number;
   userFeedback?: string;
+  userContext?: string;
 }
+
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp?: string;
+  actions?: ChatAction[];
+}
+
+export type ChatAction =
+  | { type: 'regenerate'; feedback?: string }
+  | { type: 'seek'; time: number }
+  | { type: 'loop'; start: number; end: number }
+  | { type: 'stopLoop' }
+  | { type: 'setSpeed'; rate: number }
+  | { type: 'mirror' };
 
 @Injectable()
 export class VideoReviewService {
@@ -37,7 +53,7 @@ export class VideoReviewService {
 
     if (this.modelApiKey) {
       try {
-        return await this.reviewWithAi(title, durationSeconds, audioBeatCount, movementScore, context.userFeedback);
+        return await this.reviewWithAi(title, durationSeconds, audioBeatCount, movementScore, context.userFeedback, context.userContext);
       } catch (error) {
         console.warn('AI review unavailable, falling back to heuristic analysis.', error);
       }
@@ -46,9 +62,13 @@ export class VideoReviewService {
     return this.reviewWithHeuristics(title, durationSeconds, audioBeatCount, movementScore);
   }
 
-  private async reviewWithAi(title: string, durationSeconds: number, audioBeatCount: number, movementScore: number, userFeedback?: string): Promise<VideoReviewResult> {
+  private async reviewWithAi(title: string, durationSeconds: number, audioBeatCount: number, movementScore: number, userFeedback?: string, userContext?: string): Promise<VideoReviewResult> {
     const feedbackSection = userFeedback?.trim()
-      ? `\n\nIMPORTANT — DANCER CORRECTION: The dancer provided this feedback on the previous analysis:\n"${userFeedback}"\nAdjust your observations specifically to address this correction.`
+      ? `\n\nIMPORTANT \u2014 DANCER CORRECTION: The dancer provided this feedback on the previous analysis:\n"${userFeedback}"\nAdjust your observations specifically to address this correction.`
+      : '';
+
+    const userContextSection = userContext?.trim()
+      ? `\n\nDANCER PROFILE & PREFERENCES:\n${userContext}\nTailor your analysis and tips to this dancer.`
       : '';
 
     const prompt = `You are a bachata musicality and rhythm coach. Analyze this dance clip ONLY for timing, rhythm, and musicality. Ignore posture, aesthetics, or partnership unless directly related to rhythm.
@@ -76,7 +96,7 @@ For each segment, identify:
 Example segment:
 {"startTime": 0, "endTime": 3, "label": "Derecho opening", "reason": "Step timing is 80ms late on count 1, but recovers by count 5 - good recovery"}
 
-Focus ONLY on rhythm, timing, and musicality. Ignore everything else.${feedbackSection}`;
+Focus ONLY on rhythm, timing, and musicality. Ignore everything else.${userContextSection}${feedbackSection}`;
 
     const response = await fetch(this.buildChatUrl(), {
       method: 'POST',
@@ -223,22 +243,31 @@ Focus ONLY on rhythm, timing, and musicality. Ignore everything else.${feedbackS
 
   async chat(
     message: string,
-    history: Array<{ role: string; content: string }>,
+    history: ChatMessage[],
     reviewContext?: string,
-  ): Promise<string> {
+  ): Promise<{ reply: string; actions: ChatAction[] }> {
     if (!this.modelApiKey) {
-      return 'AI coach is unavailable (no OPENAI_API_KEY). Set it in .env to enable chat.';
+      return { reply: 'AI coach is unavailable (no OPENAI_API_KEY). Set it in .env to enable chat.', actions: [] };
     }
 
-    const systemContent = [
-      'You are a bachata musicality and rhythm coach. Help the student understand their dancing.',
-      'Be encouraging, specific, and practical. Focus on rhythm, timing, energy, and musicality.',
-      reviewContext ? `\nCurrent review context: ${reviewContext}` : '',
-    ].join('');
+    const systemContent = `You are a bachata musicality and rhythm coach with direct control over the video player.
+
+Respond ONLY with valid JSON: {"reply":"...","actions":[...]}
+The actions array can be empty. Never include markdown or prose outside the JSON.
+
+Available actions (include only what makes sense for the request):
+- {"type":"regenerate","feedback":"correction"} — Re-analyze current section with a specific correction
+- {"type":"seek","time":45} — Jump to a timestamp in seconds
+- {"type":"loop","start":30,"end":45} — Set and start an A-B loop
+- {"type":"stopLoop"} — Stop the current loop
+- {"type":"setSpeed","rate":0.75} — Set playback speed (0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0)
+- {"type":"mirror"} — Toggle mirror mode
+
+Focus on rhythm, timing, energy, and musicality. Be encouraging and specific.${reviewContext ? `\n\nCurrent state: ${reviewContext}` : ''}`;
 
     const safeHistory = history
       .filter((m) => m.role === 'user' || m.role === 'assistant')
-      .slice(-20); // cap context to last 20 turns
+      .slice(-20);
 
     const response = await fetch(this.buildChatUrl(), {
       method: 'POST',
@@ -249,6 +278,7 @@ Focus ONLY on rhythm, timing, and musicality. Ignore everything else.${feedbackS
       body: JSON.stringify({
         model: this.modelName,
         temperature: 0.7,
+        response_format: { type: 'json_object' },
         messages: [
           { role: 'system', content: systemContent },
           ...safeHistory,
@@ -262,7 +292,15 @@ Focus ONLY on rhythm, timing, and musicality. Ignore everything else.${feedbackS
     }
 
     const payload = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
-    return payload.choices?.[0]?.message?.content ?? 'No response from coach.';
+    const raw = payload.choices?.[0]?.message?.content ?? '{}';
+    const parsed = this.parseJsonSafe(raw) as { reply?: unknown; actions?: unknown };
+
+    return {
+      reply: typeof parsed.reply === 'string' && parsed.reply.trim() ? parsed.reply : 'Sorry, I could not generate a response.',
+      actions: Array.isArray(parsed.actions)
+        ? (parsed.actions as ChatAction[]).filter((a) => a && typeof (a as any).type === 'string')
+        : [],
+    };
   }
 }
 

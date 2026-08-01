@@ -10,6 +10,8 @@ import { HealthController } from './presentation/controllers/health.controller';
 import { VideosController } from './modules/videos/videos.controller';
 import { InMemoryVideoRepository } from './modules/videos/in-memory-video.repository';
 import { VideoReviewService } from './modules/videos/video-review.service';
+import { ChatHistoryService } from './modules/videos/chat-history.service';
+import { SavedReviewService } from './modules/videos/saved-review.service';
 import {
   UserEntity,
   VideoEntity,
@@ -19,6 +21,8 @@ import {
   SavedLoopEntity,
   CoachPlanEntity,
   ProcessingJobEntity,
+  ChatMessageEntity,
+  SavedReviewEntity,
 } from './database/entities';
 
 @Module({
@@ -44,6 +48,8 @@ import {
         SavedLoopEntity,
         CoachPlanEntity,
         ProcessingJobEntity,
+        ChatMessageEntity,
+        SavedReviewEntity,
       ],
       synchronize: process.env.NODE_ENV !== 'production',
       logging: process.env.NODE_ENV === 'development',
@@ -51,12 +57,15 @@ import {
       retryAttempts: 3,
       retryDelay: 1000,
     }),
+    TypeOrmModule.forFeature([ChatMessageEntity, SavedReviewEntity]),
   ],
   controllers: [AppController, LessonsController, HealthController, VideosController],
   providers: [
     AppService,
     GetLessonByIdUseCase,
     VideoReviewService,
+    ChatHistoryService,
+    SavedReviewService,
     {
       provide: 'LessonRepository',
       useClass: InMemoryLessonRepository,

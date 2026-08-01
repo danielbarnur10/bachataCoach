@@ -155,21 +155,41 @@ describe('VideoReviewService — AI path', () => {
 
 describe('VideoReviewService — chat', () => {
   it('returns unavailable message when no API key is configured', async () => {
-    const reply = await makeService().chat('Hello coach', []);
+    const result = await makeService().chat('Hello coach', []);
 
-    expect(reply).toContain('OPENAI_API_KEY');
+    expect(result.reply).toContain('OPENAI_API_KEY');
+    expect(result.actions).toEqual([]);
   });
 
-  it('returns the AI response text', async () => {
-    mockFetch({ choices: [{ message: { content: 'Great footwork!' } }] });
+  it('returns the AI reply and actions', async () => {
+    const aiJson = { reply: 'Great footwork!', actions: [{ type: 'setSpeed', rate: 0.75 }] };
+    mockFetch({ choices: [{ message: { content: JSON.stringify(aiJson) } }] });
 
-    const reply = await makeService('test-key').chat('How is my timing?', []);
+    const result = await makeService('test-key').chat('How is my timing?', []);
 
-    expect(reply).toBe('Great footwork!');
+    expect(result.reply).toBe('Great footwork!');
+    expect(result.actions).toEqual([{ type: 'setSpeed', rate: 0.75 }]);
+  });
+
+  it('returns empty actions when AI sends none', async () => {
+    mockFetch({ choices: [{ message: { content: JSON.stringify({ reply: 'ok', actions: [] }) } }] });
+
+    const result = await makeService('test-key').chat('Hello', []);
+
+    expect(result.actions).toEqual([]);
+  });
+
+  it('uses json_object response_format', async () => {
+    mockFetch({ choices: [{ message: { content: JSON.stringify({ reply: 'ok', actions: [] }) } }] });
+
+    await makeService('test-key').chat('Hello', []);
+
+    const body = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
+    expect(body.response_format).toEqual({ type: 'json_object' });
   });
 
   it('includes reviewContext in the system message', async () => {
-    mockFetch({ choices: [{ message: { content: 'ok' } }] });
+    mockFetch({ choices: [{ message: { content: JSON.stringify({ reply: 'ok', actions: [] }) } }] });
 
     await makeService('test-key').chat('Question', [], 'Section 0s–30s');
 
@@ -178,30 +198,40 @@ describe('VideoReviewService — chat', () => {
     expect(system.content).toContain('Section 0s–30s');
   });
 
+  it('describes available actions in the system prompt', async () => {
+    mockFetch({ choices: [{ message: { content: JSON.stringify({ reply: 'ok', actions: [] }) } }] });
+
+    await makeService('test-key').chat('Help', []);
+
+    const body = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
+    const system = body.messages.find((m: any) => m.role === 'system');
+    expect(system.content).toContain('regenerate');
+    expect(system.content).toContain('seek');
+    expect(system.content).toContain('loop');
+  });
+
   it('caps conversation history at 20 turns', async () => {
-    mockFetch({ choices: [{ message: { content: 'ok' } }] });
-    const history = Array.from({ length: 25 }, (_, i) => ({ role: 'user', content: `msg ${i}` }));
+    mockFetch({ choices: [{ message: { content: JSON.stringify({ reply: 'ok', actions: [] }) } }] });
+    const history = Array.from({ length: 25 }, (_, i) => ({ role: 'user' as const, content: `msg ${i}` }));
 
     await makeService('test-key').chat('New message', history);
 
     const body = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
-    // system (1) + capped history (≤20) + current user msg (1) = ≤22
     expect(body.messages.length).toBeLessThanOrEqual(22);
   });
 
   it('strips non-user/assistant roles from history', async () => {
-    mockFetch({ choices: [{ message: { content: 'ok' } }] });
+    mockFetch({ choices: [{ message: { content: JSON.stringify({ reply: 'ok', actions: [] }) } }] });
     const history = [
-      { role: 'user', content: 'valid' },
-      { role: 'system', content: 'should be stripped' },
-      { role: 'assistant', content: 'also valid' },
+      { role: 'user' as const, content: 'valid' },
+      { role: 'system' as any, content: 'should be stripped' },
+      { role: 'assistant' as const, content: 'also valid' },
     ];
 
     await makeService('test-key').chat('Question', history);
 
     const body = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
     const systemMsgs = body.messages.filter((m: any) => m.role === 'system');
-    // Only the service's own system prompt should remain
     expect(systemMsgs).toHaveLength(1);
     expect(systemMsgs[0].content).not.toContain('should be stripped');
   });
