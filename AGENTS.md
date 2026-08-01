@@ -61,6 +61,16 @@ const useCase = new GetLessonByIdUseCase(mockRepo as LessonRepository);
 
 All 4 test suites pass. See [AUDIT_REPORT.md](AUDIT_REPORT.md) for full gap analysis.
 
+## Frontend
+
+Single-page app at [src/public/index.html](src/public/index.html) — no build step, plain HTML/CSS/JS served by NestJS.
+
+- **Video player**: custom controls only — no `controls` attribute on `<video>`. Play/pause, seek bar, fullscreen are all custom DOM elements. Do not add the `controls` attribute back.
+- **Mirror**: toggles `.mirrored` CSS class on `#videoMirrorWrap` (wrapper div), NOT on the `<video>` element, so UI buttons are unaffected.
+- **Speed shortcuts**: Shift+`<` / Shift+`>` step through `[0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0]`; handled in `document` keydown listener.
+- **A-B loop UI**: drag-handle timeline is fully implemented in the frontend. Backend persistence (`SavedLoopEntity`) is not yet wired up.
+- **Uploads**: `uploads/` is git-ignored — never commit video files.
+
 ## Requirements vs. Implementation Gaps
 
 These features have database entities but **no implementation yet** — they are MVP requirements:
@@ -69,7 +79,7 @@ These features have database entities but **no implementation yet** — they are
 |---------|--------|-----------|
 | Three-chunk continuation gate | ❌ Missing | `ReviewChunkEntity`, `ReviewEntity.status` |
 | Jack & Jill dancer selection | ❌ Missing | `ReviewEntity.type` |
-| A-B looping + saved loops | ❌ Missing | `SavedLoopEntity` |
+| A-B loop persistence | ⚠️ UI done, API missing | `SavedLoopEntity` |
 | Resume playback position | ❌ Missing | `VideoEntity.lastPlayedPosition` |
 | Coach practice plans | ❌ Missing | `CoachPlanEntity` |
 | Processing status state machine | ❌ Missing | `ProcessingJobEntity` |

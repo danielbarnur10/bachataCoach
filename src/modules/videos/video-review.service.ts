@@ -21,6 +21,7 @@ export interface ReviewContext {
   title?: string;
   audioBeatCount?: number;
   movementScore?: number;
+  userFeedback?: string;
 }
 
 @Injectable()
@@ -36,7 +37,7 @@ export class VideoReviewService {
 
     if (this.modelApiKey) {
       try {
-        return await this.reviewWithAi(title, durationSeconds, audioBeatCount, movementScore);
+        return await this.reviewWithAi(title, durationSeconds, audioBeatCount, movementScore, context.userFeedback);
       } catch (error) {
         console.warn('AI review unavailable, falling back to heuristic analysis.', error);
       }
@@ -45,7 +46,11 @@ export class VideoReviewService {
     return this.reviewWithHeuristics(title, durationSeconds, audioBeatCount, movementScore);
   }
 
-  private async reviewWithAi(title: string, durationSeconds: number, audioBeatCount: number, movementScore: number): Promise<VideoReviewResult> {
+  private async reviewWithAi(title: string, durationSeconds: number, audioBeatCount: number, movementScore: number, userFeedback?: string): Promise<VideoReviewResult> {
+    const feedbackSection = userFeedback?.trim()
+      ? `\n\nIMPORTANT — DANCER CORRECTION: The dancer provided this feedback on the previous analysis:\n"${userFeedback}"\nAdjust your observations specifically to address this correction.`
+      : '';
+
     const prompt = `You are a bachata musicality and rhythm coach. Analyze this dance clip ONLY for timing, rhythm, and musicality. Ignore posture, aesthetics, or partnership unless directly related to rhythm.
 
 The clip is ${durationSeconds} seconds long with approximately ${audioBeatCount} beats and movement intensity of ${movementScore}/10.
@@ -71,7 +76,7 @@ For each segment, identify:
 Example segment:
 {"startTime": 0, "endTime": 3, "label": "Derecho opening", "reason": "Step timing is 80ms late on count 1, but recovers by count 5 - good recovery"}
 
-Focus ONLY on rhythm, timing, and musicality. Ignore everything else.`;
+Focus ONLY on rhythm, timing, and musicality. Ignore everything else.${feedbackSection}`;
 
     const response = await fetch(this.buildChatUrl(), {
       method: 'POST',
@@ -215,4 +220,49 @@ Focus ONLY on rhythm, timing, and musicality. Ignore everything else.`;
   private toText(value: unknown, fallback: string): string {
     return typeof value === 'string' && value.trim() !== '' ? value : fallback;
   }
+
+  async chat(
+    message: string,
+    history: Array<{ role: string; content: string }>,
+    reviewContext?: string,
+  ): Promise<string> {
+    if (!this.modelApiKey) {
+      return 'AI coach is unavailable (no OPENAI_API_KEY). Set it in .env to enable chat.';
+    }
+
+    const systemContent = [
+      'You are a bachata musicality and rhythm coach. Help the student understand their dancing.',
+      'Be encouraging, specific, and practical. Focus on rhythm, timing, energy, and musicality.',
+      reviewContext ? `\nCurrent review context: ${reviewContext}` : '',
+    ].join('');
+
+    const safeHistory = history
+      .filter((m) => m.role === 'user' || m.role === 'assistant')
+      .slice(-20); // cap context to last 20 turns
+
+    const response = await fetch(this.buildChatUrl(), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.modelApiKey}`,
+      },
+      body: JSON.stringify({
+        model: this.modelName,
+        temperature: 0.7,
+        messages: [
+          { role: 'system', content: systemContent },
+          ...safeHistory,
+          { role: 'user', content: message },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`AI chat request failed: ${response.status}`);
+    }
+
+    const payload = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
+    return payload.choices?.[0]?.message?.content ?? 'No response from coach.';
+  }
 }
+

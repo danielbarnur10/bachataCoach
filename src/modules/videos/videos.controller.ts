@@ -74,6 +74,35 @@ export class VideosController {
     };
   }
 
+  @Post(':id/review/regenerate')
+  async regenerateReview(
+    @Param('id') id: string,
+    @Body() body: { aTime?: number; bTime?: number; chunkNumber?: number; feedback?: string },
+  ) {
+    const video = await this.videoRepository.getById(id);
+    if (!video) return { error: 'Video not found' };
+    const aTime = body.aTime ?? 0;
+    const bTime = body.bTime ?? 120;
+    const chunkNumber = Math.max(1, body.chunkNumber ?? 1);
+    return this.buildChunkReview(video, aTime, bTime, chunkNumber, body.feedback);
+  }
+
+  @Post(':id/chat')
+  async chat(
+    @Param('id') id: string,
+    @Body() body: { message?: string; history?: Array<{ role: string; content: string }>; reviewContext?: string },
+  ) {
+    if (!body.message?.trim()) {
+      return { error: 'Message is required' };
+    }
+    try {
+      const reply = await this.reviewService.chat(body.message, body.history ?? [], body.reviewContext);
+      return { reply };
+    } catch (error) {
+      return { reply: 'Sorry, there was an error reaching the AI coach. Please try again.' };
+    }
+  }
+
   @Get(':id/review/chunk/:chunkNumber')
   async getChunk(
     @Param('id') id: string,
@@ -82,22 +111,22 @@ export class VideosController {
     @Param('chunkNumber') chunkNumberStr?: string,
   ) {
     const video = await this.videoRepository.getById(id);
-    if (!video) {
-      return { error: 'Video not found' };
-    }
-
+    if (!video) return { error: 'Video not found' };
     const aTime = parseFloat(aTimeStr || '0') || 0;
     const bTime = parseFloat(bTimeStr || '120') || 120;
     const chunkNumber = Math.max(1, parseInt(chunkNumberStr || '1', 10));
+    return this.buildChunkReview(video, aTime, bTime, chunkNumber);
+  }
 
+  private async buildChunkReview(video: any, aTime: number, bTime: number, chunkNumber: number, userFeedback?: string) {
     const chunkStart = aTime + (chunkNumber - 1) * this.CHUNK_DURATION_SECONDS;
     const chunkEnd = Math.min(bTime, chunkStart + this.CHUNK_DURATION_SECONDS);
 
-    if (chunkStart >= bTime) {
-      return { error: 'No more chunks in this interval' };
-    }
+    if (chunkStart >= bTime) return { error: 'No more chunks in this interval' };
 
     const chunkDurationSeconds = chunkEnd - chunkStart;
+    const totalChunks = Math.max(1, Math.ceil((bTime - aTime) / this.CHUNK_DURATION_SECONDS));
+    const hasNextChunk = chunkNumber < totalChunks;
 
     try {
       const review = await Promise.race([
@@ -106,35 +135,20 @@ export class VideosController {
           title: video.title,
           audioBeatCount: this.estimateBeatCount(video),
           movementScore: this.estimateMovementScore(video),
+          userFeedback,
         }),
         new Promise((_, reject) =>
           setTimeout(() => reject(new Error('AI analysis timeout')), 45000)
         ),
       ]) as any;
 
-      const totalChunks = Math.max(1, Math.ceil((bTime - aTime) / this.CHUNK_DURATION_SECONDS));
-      const hasNextChunk = chunkNumber < totalChunks;
-
-      // Ensure segments always exist, even if AI didn't provide them
       let segments = review.segments || [];
-      if (!segments || segments.length === 0) {
-        // Generate fallback segments
+      if (!segments.length) {
         segments = [
-          {
-            startTime: chunkStart,
-            endTime: chunkStart + chunkDurationSeconds * 0.5,
-            label: 'First half',
-            reason: 'Pay attention to timing and positioning',
-          },
-          {
-            startTime: chunkStart + chunkDurationSeconds * 0.5,
-            endTime: chunkEnd,
-            label: 'Second half',
-            reason: 'Watch for consistency through the finish',
-          },
+          { startTime: chunkStart, endTime: chunkStart + chunkDurationSeconds * 0.5, label: 'First half', reason: 'Pay attention to timing and positioning' },
+          { startTime: chunkStart + chunkDurationSeconds * 0.5, endTime: chunkEnd, label: 'Second half', reason: 'Watch for consistency through the finish' },
         ];
       } else {
-        // Convert segment times to absolute video times
         segments = segments.map((seg: any) => ({
           ...seg,
           startTime: chunkStart + seg.startTime,
@@ -158,8 +172,6 @@ export class VideosController {
       };
     } catch (error) {
       console.error('Error analyzing chunk:', error);
-      const totalChunks = Math.max(1, Math.ceil((bTime - aTime) / this.CHUNK_DURATION_SECONDS));
-
       return {
         chunkNumber,
         totalChunks,
@@ -168,29 +180,14 @@ export class VideosController {
         chunkDuration: chunkDurationSeconds,
         aTime,
         bTime,
-        hasNextChunk: chunkNumber < totalChunks,
-        error: 'AI analysis timed out. Using fallback analysis...',
+        hasNextChunk,
         summary: `Section ${this.formatTime(chunkStart)}–${this.formatTime(chunkEnd)}: Review the timing and musicality here.`,
         musicality: 'Listen carefully to how your steps align with the beat in this section.',
         style: 'Focus on maintaining your frame and posture throughout this moment.',
-        improvementTips: [
-          'Count the beats clearly in this section',
-          'Practice this specific moment at 0.75x speed',
-          'Record another attempt and compare',
-        ],
+        improvementTips: ['Count the beats clearly in this section', 'Practice this specific moment at 0.75x speed', 'Record another attempt and compare'],
         segments: [
-          {
-            startTime: chunkStart,
-            endTime: chunkStart + chunkDurationSeconds * 0.5,
-            label: 'First half',
-            reason: 'Pay attention to your initial positioning and weight transfer',
-          },
-          {
-            startTime: chunkStart + chunkDurationSeconds * 0.5,
-            endTime: chunkEnd,
-            label: 'Second half',
-            reason: 'Watch for consistency and completion of the movement',
-          },
+          { startTime: chunkStart, endTime: chunkStart + chunkDurationSeconds * 0.5, label: 'First half', reason: 'Pay attention to your initial positioning and weight transfer' },
+          { startTime: chunkStart + chunkDurationSeconds * 0.5, endTime: chunkEnd, label: 'Second half', reason: 'Watch for consistency and completion of the movement' },
         ],
         analysisSource: 'fallback',
         prompt: `Chunk ${chunkNumber} of ${totalChunks} (fallback analysis)`,

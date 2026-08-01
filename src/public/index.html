@@ -124,6 +124,11 @@
       #videoMirrorWrap.mirrored { transform: scaleX(-1); }
       .custom-video-controls { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
       .custom-video-controls input[type=range] { flex: 1; cursor: pointer; accent-color: var(--accent); border: none; background: none; padding: 0; border-radius: 0; height: 4px; }
+      #volumeBar { flex: none !important; width: 70px; }
+      .chat-messages { max-height: 280px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; padding-right: 4px; }
+      .chat-bubble { max-width: 82%; padding: 8px 12px; font-size: 0.9rem; line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
+      .chat-bubble.user { align-self: flex-end; background: rgba(244,63,94,0.22); border-radius: 14px 14px 2px 14px; }
+      .chat-bubble.ai { align-self: flex-start; background: rgba(255,255,255,0.07); border-radius: 14px 14px 14px 2px; }
       .muted { color: var(--muted); }
       .row { display: flex; justify-content: space-between; gap: 10px; align-items: center; flex-wrap: wrap; }
       .small { font-size: 0.95rem; }
@@ -180,6 +185,19 @@
           <div id="reviewPanel" class="review-card">
             <p class="muted">AI feedback will appear here after upload.</p>
           </div>
+          <div id="chatPanel" class="review-card" style="margin-top: 12px;">
+            <h3 style="margin: 0 0 8px 0; font-size: 1rem;">💬 Coach Chat</h3>
+            <p class="small muted" style="margin: 0 0 10px 0;">Correct the AI or ask questions — e.g. "the energy was more sensual, not aggressive"</p>
+            <div id="regenerateArea" style="display: none; margin-bottom: 10px;">
+              <button onclick="regenerateWithFeedback()" style="width: 100%;">🔄 Regenerate Review with My Feedback</button>
+              <p class="small muted" style="margin: 4px 0 0 0; text-align: center;">Re-analyzes the same section using your chat corrections</p>
+            </div>
+            <div id="chatMessages" class="chat-messages"></div>
+            <div style="display: flex; gap: 8px;">
+              <input type="text" id="chatInput" placeholder="Talk to your coach…" style="flex: 1; border-radius: 12px;" onkeydown="if(event.key==='Enter')sendChatMessage()">
+              <button onclick="sendChatMessage()">Send</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -189,6 +207,8 @@
         videos: [],
         selectedVideoId: null,
         reviewState: null,
+        chatHistory: [],
+        currentChunk: 1,
       };
 
       async function refreshVideos() {
@@ -235,6 +255,11 @@
         stopLooping();
         state.selectedVideoId = id;
         state.reviewState = null;
+        state.chatHistory = [];
+        state.currentChunk = 1;
+        document.getElementById('chatMessages').innerHTML = '';
+        const regenerateArea = document.getElementById('regenerateArea');
+        if (regenerateArea) regenerateArea.style.display = 'none';
         const playerPanel = document.getElementById('playerPanel');
         const reviewPanel = document.getElementById('reviewPanel');
 
@@ -256,6 +281,8 @@
               <span id="currentTimeDisplay" class="small muted">00:00</span>
               <input type="range" id="seekBar" min="0" max="100" value="0" step="0.1" oninput="seekVideo(this.value)">
               <span id="durationDisplay" class="small muted">00:00</span>
+              <button id="muteBtn" onclick="toggleMute()" style="padding: 6px 10px;">🔇</button>
+              <input type="range" id="volumeBar" min="0" max="1" step="0.05" value="1" oninput="setVolume(this.value)">
               <button onclick="toggleFullscreen()" style="padding: 6px 10px;">⛶</button>
             </div>
           </div>
@@ -325,6 +352,12 @@
         videoEl.addEventListener('pause', () => {
           const btn = document.getElementById('playPauseBtn');
           if (btn) btn.textContent = '▶';
+        });
+        videoEl.addEventListener('volumechange', () => {
+          const btn = document.getElementById('muteBtn');
+          const vol = document.getElementById('volumeBar');
+          if (btn) btn.textContent = (videoEl.muted || videoEl.volume === 0) ? '🔇' : '🔊';
+          if (vol && !videoEl.muted) vol.value = String(videoEl.volume);
         });
         videoEl.addEventListener('click', togglePlayPause);
 
@@ -492,6 +525,7 @@
       }
 
       async function loadChunk(videoId, chunkNumber, aTime, bTime) {
+        state.currentChunk = chunkNumber;
         const reviewPanel = document.getElementById('reviewPanel');
         reviewPanel.innerHTML = '<p class="muted">Loading chunk...</p>';
 
@@ -672,6 +706,111 @@
       function toggleMirror() {
         const wrap = document.getElementById('videoMirrorWrap');
         if (wrap) wrap.classList.toggle('mirrored');
+      }
+
+      function toggleMute() {
+        const videoEl = document.getElementById('videoPlayer');
+        if (!videoEl) return;
+        videoEl.muted = !videoEl.muted;
+      }
+
+      function setVolume(value) {
+        const videoEl = document.getElementById('videoPlayer');
+        if (!videoEl) return;
+        videoEl.volume = parseFloat(value);
+        if (videoEl.volume > 0) videoEl.muted = false;
+      }
+
+      function appendChatBubble(role, text) {
+        const id = 'msg-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+        const messages = document.getElementById('chatMessages');
+        if (!messages) return id;
+        const div = document.createElement('div');
+        div.id = id;
+        div.className = `chat-bubble ${role === 'user' ? 'user' : 'ai'}`;
+        div.textContent = text;
+        messages.appendChild(div);
+        messages.scrollTop = messages.scrollHeight;
+        return id;
+      }
+
+      function updateChatBubble(id, text) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = text;
+      }
+
+      async function sendChatMessage() {
+        const input = document.getElementById('chatInput');
+        const message = (input.value || '').trim();
+        if (!message) return;
+        if (!state.selectedVideoId) {
+          appendChatBubble('ai', 'Please select a video first before chatting with the coach.');
+          return;
+        }
+        input.value = '';
+
+        state.chatHistory.push({ role: 'user', content: message });
+        appendChatBubble('user', message);
+        const typingId = appendChatBubble('ai', '…');
+
+        let reviewContext = null;
+        if (state.reviewState) {
+          reviewContext = `Video section reviewed: ${state.reviewState.aTime}s\u2013${state.reviewState.bTime}s`;
+        }
+
+        if (state.reviewState) {
+          const area = document.getElementById('regenerateArea');
+          if (area) area.style.display = 'block';
+        }
+
+        try {
+          const res = await fetch(`/videos/${state.selectedVideoId}/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message, history: state.chatHistory.slice(0, -1), reviewContext }),
+          });
+          const data = await res.json();
+          const reply = data.reply || 'No response from coach.';
+          updateChatBubble(typingId, reply);
+          state.chatHistory.push({ role: 'assistant', content: reply });
+        } catch {
+          updateChatBubble(typingId, 'Could not reach the AI coach. Please try again.');
+        }
+      }
+
+      async function regenerateWithFeedback() {
+        if (!state.reviewState || !state.selectedVideoId) {
+          appendChatBubble('ai', 'Start an AI review first, then I can regenerate it with your feedback.');
+          return;
+        }
+        const userMessages = state.chatHistory
+          .filter((m) => m.role === 'user')
+          .map((m) => m.content)
+          .join('\n');
+        if (!userMessages) {
+          appendChatBubble('ai', 'Send me your corrections in the chat first, then click Regenerate.');
+          return;
+        }
+        const typingId = appendChatBubble('ai', '⏳ Re-analyzing with your corrections…');
+        try {
+          const res = await fetch(`/videos/${state.selectedVideoId}/review/regenerate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              aTime: state.reviewState.aTime,
+              bTime: state.reviewState.bTime,
+              chunkNumber: state.currentChunk,
+              feedback: userMessages,
+            }),
+          });
+          const data = await res.json();
+          if (!data.summary && data.error) throw new Error(data.error);
+          await renderReviewPanel(state.selectedVideoId, data);
+          const note = data.analysisSource === 'fallback' ? ' (used heuristic fallback — AI timed out)' : '';
+          updateChatBubble(typingId, `✅ Review regenerated with your corrections!${note} See the updated analysis above.`);
+        } catch (err) {
+          updateChatBubble(typingId, `Failed to regenerate: ${err instanceof Error ? err.message : 'unknown error'}. Please try again.`);
+        }
       }
 
       async function deleteVideo(id) {
