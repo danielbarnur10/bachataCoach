@@ -56,6 +56,7 @@ import {
       dropSchema: false,
       retryAttempts: 3,
       retryDelay: 1000,
+      ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false
     }),
     TypeOrmModule.forFeature([ChatMessageEntity, SavedReviewEntity]),
   ],
