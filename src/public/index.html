@@ -9,7 +9,8 @@
       (function() {
         const saved = localStorage.getItem('theme');
         const sys = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-        if ((saved || sys) === 'light') document.documentElement.setAttribute('data-theme', 'light');
+        const theme = saved === 'light' || saved === 'dark' ? saved : sys;
+        document.documentElement.setAttribute('data-theme', theme);
       })();
     </script>
     <style>
@@ -1225,17 +1226,18 @@
       (function() {
         const saved = localStorage.getItem('theme');
         const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        const theme = saved || (prefersDark ? 'dark' : 'light');
-        if (theme === 'light') document.documentElement.setAttribute('data-theme', 'light');
+        const theme = saved === 'light' || saved === 'dark'
+          ? saved
+          : (prefersDark ? 'dark' : 'light');
+        document.documentElement.setAttribute('data-theme', theme);
         const btn = document.getElementById('themeBtn');
         if (btn) btn.textContent = theme === 'light' ? '🌙' : '☀️';
       })();
 
       function toggleTheme() {
-        const current = document.documentElement.getAttribute('data-theme');
+        const current = document.documentElement.getAttribute('data-theme') || 'dark';
         const next = current === 'light' ? 'dark' : 'light';
-        if (next === 'light') document.documentElement.setAttribute('data-theme', 'light');
-        else document.documentElement.removeAttribute('data-theme');
+        document.documentElement.setAttribute('data-theme', next);
         localStorage.setItem('theme', next);
         document.getElementById('themeBtn').textContent = next === 'light' ? '🌙' : '☀️';
       }
