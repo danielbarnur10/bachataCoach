@@ -218,6 +218,29 @@
       .account-summary > div:last-child { min-width: 0; }
       .account-actions { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
       .secondary-btn { background: var(--item-bg); border: 1px solid var(--border); color: var(--text); }
+      .api-key-guide {
+        margin-top: -2px;
+        padding: 10px 12px;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        background: var(--item-bg);
+      }
+      .api-key-guide strong { display: block; margin-bottom: 4px; }
+      .api-key-guide ol {
+        margin: 8px 0 0;
+        padding-left: 20px;
+        display: grid;
+        gap: 4px;
+      }
+      .api-key-guide a {
+        color: #34d399;
+        text-decoration: underline;
+      }
+      .api-key-guide .open-link-btn {
+        margin-top: 8px;
+        padding: 6px 10px;
+        border-radius: 8px;
+      }
       @media (max-width: 640px) {
         body { padding-top: 72px; }
         .grid { grid-template-columns: minmax(0, 1fr); }
@@ -294,6 +317,17 @@
           <form class="auth-form" onsubmit="saveAccountSettings(event)">
             <label>Display name<input id="settingsName" type="text" autocomplete="name" maxlength="80" /></label>
             <label>AI provider key<input id="settingsApiKey" type="password" autocomplete="off" placeholder="Add a personal API key" /></label>
+            <div class="api-key-guide small muted">
+              <strong>Need a free API key?</strong>
+              <a href="https://aistudio.google.com/app/api-keys?project=alpine-ship-144609" target="_blank" rel="noopener noreferrer">Open Google AI Studio key page</a>
+              <ol>
+                <li>Sign in with your Google account.</li>
+                <li>Click Create API key (or choose an existing key).</li>
+                <li>Copy the key value.</li>
+                <li>Paste it here and click Save settings.</li>
+              </ol>
+              <button class="secondary-btn open-link-btn" type="button" onclick="openApiKeyGuide()">Open key page</button>
+            </div>
             <span class="small muted" id="apiKeyState"></span>
             <button class="auth-submit" type="submit">Save settings</button>
             <div class="account-actions">
@@ -420,6 +454,11 @@
         const status = document.getElementById('authStatus');
         status.textContent = message;
         status.classList.toggle('error', isError);
+      }
+
+      function openApiKeyGuide() {
+        window.open('https://aistudio.google.com/app/api-keys?project=alpine-ship-144609', '_blank', 'noopener,noreferrer');
+        setAuthStatus('Tip: create or copy your key there, then paste it into AI provider key and save.');
       }
 
       async function parseApiResponse(response) {
