@@ -67,6 +67,7 @@
         color: var(--text);
         min-height: 100vh;
         padding: 24px;
+        overflow-x: hidden;
       }
 
       .app {
@@ -99,6 +100,7 @@
         background: var(--timeline-track);
         border-radius: 4px;
         cursor: pointer;
+        touch-action: none;
       }
 
       .timeline-progress {
@@ -128,6 +130,7 @@
         transform: translateY(-50%);
         cursor: col-resize;
         transition: all 0.1s;
+        touch-action: none;
       }
 
       .timeline-handle:hover {
@@ -174,6 +177,8 @@
       video { width: 100%; border-radius: 14px; background: black; cursor: pointer; }
       #videoMirrorWrap.mirrored { transform: scaleX(-1); }
       .custom-video-controls { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+      .custom-video-controls button { min-height: 40px; }
+      .seek-step-btn { min-width: 48px; padding: 6px 10px; }
       .custom-video-controls input[type=range] { flex: 1; cursor: pointer; accent-color: var(--accent); border: none; background: none; padding: 0; border-radius: 0; height: 4px; }
       #volumeBar { flex: none !important; width: 70px; }
       .chat-messages { max-height: 280px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; padding-right: 4px; }
@@ -218,6 +223,24 @@
         .grid { grid-template-columns: minmax(0, 1fr); }
         .card, .panel, .controls > input { min-width: 0; }
         .controls > input { width: 100%; }
+        .video-wrap { overflow: hidden; }
+        .timeline-handle { width: 18px; height: 26px; }
+        .custom-video-controls {
+          flex-wrap: wrap;
+          gap: 10px;
+        }
+        .custom-video-controls #seekBar {
+          order: 2;
+          flex: 1 1 100%;
+          min-width: 100%;
+        }
+        .custom-video-controls #currentTimeDisplay,
+        .custom-video-controls #durationDisplay {
+          order: 3;
+        }
+        .custom-video-controls #volumeBar {
+          width: 88px;
+        }
         .account-btn { left: 16px; right: auto; max-width: calc(100vw - 88px); }
         .theme-btn { right: 16px; }
         .auth-shell { padding: 20px; }
@@ -721,10 +744,12 @@
           </div>
           <div class="video-wrap">
             <div id="videoMirrorWrap">
-              <video id="videoPlayer" playsinline autoplay muted></video>
+              <video id="videoPlayer" playsinline webkit-playsinline autoplay muted></video>
             </div>
             <div class="custom-video-controls">
+              <button class="seek-step-btn" onclick="seekBy(-5)" aria-label="Back 5 seconds">-5s</button>
               <button id="playPauseBtn" onclick="togglePlayPause()" style="padding: 6px 14px; min-width: 44px;">▶</button>
+              <button class="seek-step-btn" onclick="seekBy(5)" aria-label="Forward 5 seconds">+5s</button>
               <span id="currentTimeDisplay" class="small muted">00:00</span>
               <input type="range" id="seekBar" min="0" max="100" value="0" step="0.1" oninput="seekVideo(this.value)">
               <span id="durationDisplay" class="small muted">00:00</span>
@@ -875,38 +900,89 @@
           document.getElementById('manualBTime').value = bTime;
         };
 
-        const dragHandle = (handle, isB) => {
-          let isDragging = false;
+        let activeHandleType = null;
+        let draggedAt = 0;
 
-          handle.addEventListener('mousedown', () => {
-            isDragging = true;
-          });
+        const updateFromClientX = (clientX) => {
+          const rect = timelineBar.getBoundingClientRect();
+          const percent = Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100));
+          const time = (percent / 100) * duration;
 
-          document.addEventListener('mousemove', (e) => {
-            if (!isDragging) return;
+          if (activeHandleType === 'b') {
+            bTime = Math.max(aTime + 0.1, time);
+          } else if (activeHandleType === 'a') {
+            aTime = Math.min(time, bTime - 0.1);
+          }
 
-            const rect = timelineBar.getBoundingClientRect();
-            const percent = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
-            const time = (percent / 100) * duration;
-
-            if (isB) {
-              bTime = Math.max(aTime + 0.1, time);
-            } else {
-              aTime = Math.min(time, bTime - 0.1);
-            }
-
-            updateDisplay();
-          });
-
-          document.addEventListener('mouseup', () => {
-            isDragging = false;
-          });
+          updateDisplay();
         };
 
-        dragHandle(handleA, false);
-        dragHandle(handleB, true);
+        const onDragMove = (clientX) => {
+          if (!activeHandleType) return;
+          draggedAt = Date.now();
+          updateFromClientX(clientX);
+        };
+
+        const endDrag = () => {
+          activeHandleType = null;
+        };
+
+        const startDrag = (handleType, clientX) => {
+          activeHandleType = handleType;
+          draggedAt = Date.now();
+          updateFromClientX(clientX);
+        };
+
+        const startPointerDrag = (handleType) => (event) => {
+          startDrag(handleType, event.clientX);
+          event.preventDefault();
+        };
+
+        const startMouseDrag = (handleType) => (event) => {
+          startDrag(handleType, event.clientX);
+          event.preventDefault();
+        };
+
+        const startTouchDrag = (handleType) => (event) => {
+          const touch = event.touches?.[0];
+          if (!touch) return;
+          startDrag(handleType, touch.clientX);
+          event.preventDefault();
+        };
+
+        const onPointerMove = (event) => {
+          onDragMove(event.clientX);
+          if (activeHandleType) event.preventDefault();
+        };
+
+        const onMouseMove = (event) => {
+          onDragMove(event.clientX);
+        };
+
+        const onTouchMove = (event) => {
+          const touch = event.touches?.[0];
+          if (!touch) return;
+          onDragMove(touch.clientX);
+          if (activeHandleType) event.preventDefault();
+        };
+
+        handleA.addEventListener('pointerdown', startPointerDrag('a'));
+        handleB.addEventListener('pointerdown', startPointerDrag('b'));
+        handleA.addEventListener('mousedown', startMouseDrag('a'));
+        handleB.addEventListener('mousedown', startMouseDrag('b'));
+        handleA.addEventListener('touchstart', startTouchDrag('a'), { passive: false });
+        handleB.addEventListener('touchstart', startTouchDrag('b'), { passive: false });
+        timelineBar.addEventListener('pointermove', onPointerMove);
+        window.addEventListener('pointerup', endDrag);
+        window.addEventListener('pointercancel', endDrag);
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', endDrag);
+        window.addEventListener('touchmove', onTouchMove, { passive: false });
+        window.addEventListener('touchend', endDrag);
+        window.addEventListener('touchcancel', endDrag);
 
         timelineBar.addEventListener('click', (e) => {
+          if (Date.now() - draggedAt < 180) return;
           const rect = timelineBar.getBoundingClientRect();
           const percent = ((e.clientX - rect.left) / rect.width) * 100;
           const time = (percent / 100) * duration;
@@ -1271,6 +1347,12 @@
       function seekVideo(percent) {
         const videoEl = document.getElementById('videoPlayer');
         if (videoEl && videoEl.duration) videoEl.currentTime = (percent / 100) * videoEl.duration;
+      }
+
+      function seekBy(deltaSeconds) {
+        const videoEl = document.getElementById('videoPlayer');
+        if (!videoEl || !videoEl.duration) return;
+        videoEl.currentTime = Math.max(0, Math.min(videoEl.duration, videoEl.currentTime + deltaSeconds));
       }
 
       function toggleFullscreen() {

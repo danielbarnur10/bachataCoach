@@ -112,36 +112,78 @@ export class PracticeReviewService {
       : '';
 
     const songSection = songInfo?.trim()
-      ? `\n\nSONG IDENTIFICATION:\nThe dancer is practicing to: "${songInfo}"\nUsing your knowledge of this song/artist:\n- Identify the bachata subgenre (Sensual / Urban / Traditional / Fusion / Moderno)\n- Reference the typical BPM, energy, and emotional tone for this specific song\n- Note key structural moments (when does the Mambo hit? where is the Majao section?)\n- Tailor ALL rhythmic observations to this song's specific feel — e.g. a sensual Romeo Santos track demands different body expression than a traditional Frank Reyes or an urban Aventura cut.`
+      ? `\n\nSONG IDENTIFICATION:\nThe dancer is practicing to: "${songInfo}"\nUsing your knowledge of this song/artist:\n- Identify the bachata subgenre or dance context (Sensual / Urban / Traditional / Fusion / Moderno)\n- Reference the typical BPM, energy, and emotional tone for this specific song\n- Note key structural moments (when does the Mambo hit? where is the Majao section?)\n- Tailor ALL rhythmic observations to this song's specific feel — e.g. a sensual Romeo Santos track demands different body expression than a traditional Frank Reyes or an urban Aventura cut.`
       : '';
 
-    const prompt = `You are a bachata musicality and rhythm coach. Analyze this dance clip ONLY for timing, rhythm, and musicality. Ignore posture, aesthetics, or partnership unless directly related to rhythm.
+  const prompt = `
+You are a bachata musicality, rhythm, and partner-dance coach. Analyze this dance clip only from observable evidence.
 
-The clip is ${durationSeconds} seconds long with approximately ${audioBeatCount} beats and movement intensity of ${movementScore}/10.
+Evaluate:
+1. Timing, rhythm, musicality, and beat alignment.
+2. Connection and partner responsiveness when directly visible.
+3. Playfulness and flirtatious energy as expressed through timing, teasing, invitations, reactions, eye contact, proximity, and changes in energy. Do not infer private feelings or personality.
+4. Body movement as it relates to the music: torso, hips, weight changes, isolations, pauses, dynamics, accents, and rhythmic texture. Ignore attractiveness and generic aesthetics.
+5. Song-section identification throughout the entire clip, including the intro.
 
-BACHATA SONG STRUCTURE:
-- DERECHO (intro/straight section): Basic 8-count timing, foundation
-- MAJAO (syncopated section): Syncopated rhythmic accents, call-and-response feel
-- MAMBO (percussion-focused): Aggressive rhythmic hits, percussion-driven accents
+The clip is ${durationSeconds} seconds long, with approximately ${audioBeatCount} beats and movement intensity of ${movementScore}/10.
 
-Return JSON with:
-- summary: Which song section this is and overall rhythm quality
-- musicality: How well they follow beats and accents
-- style: Rhythm interpretation (strict, loose, syncopated, etc)
-- improvementTips: Array of 3 timing/rhythm-specific tips
-- segments: Array of {startTime, endTime, label, reason} breaking down rhythm moments
+BACHATA MUSICAL FRAMEWORKS:
+- Intro: The opening arrangement of the song, not a separate bachata rhythm. Identify which framework it uses when audible.
+- Derecho: The stable foundational bachata rhythm, commonly heard in instrumental intros and verses. Listen for the regular guira, bongo, bass, and rhythm-guitar pattern.
+- Majao: A more rhythmically emphasized bachata framework, commonly heard in choruses or livelier sections. Listen for sparser percussion, stronger downbeats, fuller syncopated bass, and mid-tempo requinto grooves.
+- Mambo: The highest-energy instrumental bachata section, usually a vocal break or interlude led by requinto/guitar grooves, improvisation, and percussion influenced by merengue. Do not label a section Mambo only because the dancer moves with high energy.
+- Unclear: Use when the audio or visual evidence is insufficient. Do not force a classification.
 
-For each segment, identify:
-- Which PART of the song it seems to be (Derecho/Majao/Mambo)
-- Specific timing observations (early/late/on-time)
-- Beat alignment quality
-- Rhythm accuracy
+Derecho, Majao, and Mambo describe the music rhythmic framework, not simply the dancer movement intensity. Identify them from the audible rhythm, percussion, bass, guitar, vocals, and arrangement whenever audio is available. A song may transition between frameworks, and the patterns can overlap. If classification is uncertain, state why and include a confidence value.
 
-Example segment:
-{"startTime": 0, "endTime": 3, "label": "Derecho opening", "reason": "Step timing is 80ms late on count 1, but recovers by count 5 - good recovery"}
+Analyze dance fusion separately under danceStyleInfluences. Fusion is not a bachata song rhythm or song section; it may describe the dancer combining traditional bachata with sensual, urban, salsa/mambo, contemporary, or other movement qualities.
 
-Focus ONLY on rhythm, timing, and musicality. Ignore everything else.${songSection}${userContextSection}${feedbackSection}`;
+Return valid JSON only. Do not include Markdown or commentary.
 
+Required JSON structure (must include these exact top-level keys):
+{
+  "summary": "string",
+  "musicality": "string",
+  "style": "string",
+  "improvementTips": ["string", "string", "string"],
+  "segments": [
+    {
+      "startTime": 0,
+      "endTime": 3,
+      "label": "Derecho opening",
+      "reason": "Step timing is approximately late on count 1 but recovers by count 5; connection remains responsive."
+    }
+  ],
+  "details": {
+    "dominantSongPart": "Intro | Derecho | Majao | Mambo | Unclear",
+    "songPartsDetected": ["string"],
+    "confidence": 0.0,
+    "connection": "string",
+    "flirtPlayfulness": "string",
+    "bodyMovement": "string",
+    "danceStyleInfluences": ["Traditional Bachata | Sensual | Urban | Salsa/Mambo | Contemporary | Other | None | Unclear"]
+  }
+}
+
+For every segment, identify:
+- The likely musical framework: Derecho, Majao, Mambo, or Unclear, plus the arrangement position: Intro, Verse, Chorus, Instrumental Interlude, Outro, or Unclear.
+- Whether the dancer is early, late, on time, or mixed.
+- Beat-alignment quality and rhythm accuracy.
+- Any meaningful connection, playful/flirtatious exchange, or partner responsiveness.
+- How body movement supports or misses the musical accents.
+- Specific musical moments such as syncopation, breaks, percussion hits, pauses, requinto riffs, or call-and-response.
+
+Give exactly 3 improvement tips. Use approximate timing only when supported by the clip; do not invent precise millisecond values.
+
+Additional song context:
+${songSection}
+
+Additional user context:
+${userContextSection}
+
+Previous feedback:
+${feedbackSection}
+`;
     const response = await fetch(this.buildChatUrl(), {
       method: 'POST',
       headers: {
@@ -156,7 +198,7 @@ Focus ONLY on rhythm, timing, and musicality. Ignore everything else.${songSecti
           {
             role: 'system',
             content:
-              'You are a bachata rhythm and musicality coach. Focus ONLY on timing, rhythm, beat accuracy, and musical interpretation. Return valid JSON only.',
+              'You are a bachata rhythm and musicality coach. Focus on timing, rhythm, beat accuracy, and musical interpretation first, while including only observable partner connection/playfulness/body-movement notes that relate to the music. Return valid JSON only.',
           },
           { role: 'user', content: prompt },
         ],
@@ -171,18 +213,9 @@ Focus ONLY on rhythm, timing, and musicality. Ignore everything else.${songSecti
     const content = payload.choices?.[0]?.message?.content ?? '{}';
     const parsed = this.parseJsonSafe(content);
 
-    const summary = this.toText(
-      parsed.summary,
-      `Timing and rhythm assessment for this section.`,
-    );
-    const musicality = this.toText(
-      parsed.musicality,
-      'Stay connected to the beat and respond to musical accents.',
-    );
-    const style = this.toText(
-      parsed.style,
-      'Maintain consistent rhythm throughout.',
-    );
+    const summary = this.pickSummaryText(parsed);
+    const musicality = this.pickMusicalityText(parsed);
+    const style = this.pickStyleText(parsed);
 
     return {
       summary,
@@ -358,6 +391,49 @@ Focus ONLY on rhythm, timing, and musicality. Ignore everything else.${songSecti
 
   private toText(value: unknown, fallback: string): string {
     return typeof value === 'string' && value.trim() !== '' ? value : fallback;
+  }
+
+  private pickSummaryText(parsed: Record<string, unknown>): string {
+    const direct = this.toText(parsed.summary, '');
+    if (direct) return direct;
+
+    if (this.isObject(parsed.summary)) {
+      const fromOverall = this.toText(parsed.summary.overall, '');
+      if (fromOverall) return fromOverall;
+    }
+
+    return 'Timing and rhythm assessment for this section.';
+  }
+
+  private pickMusicalityText(parsed: Record<string, unknown>): string {
+    const direct = this.toText(parsed.musicality, '');
+    if (direct) return direct;
+
+    if (this.isObject(parsed.musicality)) {
+      const timing = this.toText(parsed.musicality.timingObservations, '');
+      const beat = this.toText(parsed.musicality.beatAlignment, '');
+      const accent = this.toText(parsed.musicality.accentInterpretation, '');
+      const combined = [timing, beat, accent].filter(Boolean).join(' ');
+      if (combined) return combined;
+    }
+
+    return 'Stay connected to the beat and respond to musical accents.';
+  }
+
+  private pickStyleText(parsed: Record<string, unknown>): string {
+    const direct = this.toText(parsed.style, '');
+    if (direct) return direct;
+
+    if (this.isObject(parsed.musicality)) {
+      const nestedStyle = this.toText(parsed.musicality.style, '');
+      if (nestedStyle) return nestedStyle;
+    }
+
+    return 'Maintain consistent rhythm throughout.';
+  }
+
+  private isObject(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null;
   }
 
   async chat(

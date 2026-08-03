@@ -201,6 +201,47 @@ describe('PracticeReviewService — AI path', () => {
 
     expect(review.segments.every((s) => s.endTime > s.startTime)).toBe(true);
   });
+
+  it('maps nested schema fields into flat response text fields', async () => {
+    mockFetch({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              summary: {
+                overall: 'Strong groove with occasional late count-1 entries.',
+                dominantSongPart: 'Majao',
+                confidence: 0.8,
+              },
+              musicality: {
+                timingObservations: 'Mostly on beat with brief delays.',
+                beatAlignment: 'Count 5 is clear; count 1 drifts late.',
+                accentInterpretation: 'Percussion hits are emphasized.',
+                style: 'syncopated',
+              },
+              improvementTips: ['Tip one', 'Tip two', 'Tip three'],
+              segments: [
+                {
+                  startTime: 0,
+                  endTime: 5,
+                  label: 'Majao entry',
+                  reason: 'Late on count 1, then recovers.',
+                },
+              ],
+            }),
+          },
+        },
+      ],
+    });
+
+    const review = await makeService('test-key').reviewVideo('Test', {
+      durationSeconds: 24,
+    });
+
+    expect(review.summary).toContain('Strong groove');
+    expect(review.musicality).toContain('Mostly on beat');
+    expect(review.style).toBe('syncopated');
+  });
 });
 
 describe('PracticeReviewService — chat', () => {
