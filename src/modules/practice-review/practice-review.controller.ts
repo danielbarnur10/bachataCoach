@@ -5,6 +5,7 @@ import {
   Delete,
   ForbiddenException,
   Get,
+  Logger,
   Optional,
   Param,
   Patch,
@@ -41,6 +42,7 @@ const execAsync = promisify(exec);
 
 @Controller('videos')
 export class PracticeReviewController {
+  private readonly logger = new Logger(PracticeReviewController.name);
   private readonly uploadDir: string = join(process.cwd(), 'uploads');
   private readonly CHUNK_DURATION_SECONDS = 15;
   private readonly MAX_CHUNK_DURATION_SECONDS = 20;
@@ -135,12 +137,21 @@ export class PracticeReviewController {
     },
     @Req() req?: Request,
   ) {
+    const requestId = this.getRequestId(req);
     const video = await this.getAccessibleVideoOrNull(id, req);
-    if (!video) return { error: 'Video not found' };
+    if (!video) {
+      this.logger.warn(
+        `regen request rejected: video not found (videoId=${id}, requestId=${requestId})`,
+      );
+      return { error: 'Video not found' };
+    }
     const aTime = body.aTime ?? 0;
     const bTime = body.bTime ?? 120;
     const chunkNumber = Math.max(1, body.chunkNumber ?? 1);
     const apiKey = await this.getUserApiKey(req);
+    this.logger.log(
+      `regen request accepted (videoId=${id}, chunk=${chunkNumber}, range=${aTime}-${bTime}, hasFeedback=${Boolean(body.feedback?.trim())}, hasApiKey=${Boolean(apiKey)}, requestId=${requestId})`,
+    );
     return this.buildChunkReview(
       video,
       aTime,
@@ -151,6 +162,7 @@ export class PracticeReviewController {
       true,
       body.songInfo,
       apiKey,
+      requestId,
     );
   }
 
@@ -168,9 +180,13 @@ export class PracticeReviewController {
     if (!body.message?.trim()) {
       return { error: 'Message is required' };
     }
+    const requestId = this.getRequestId(req);
     try {
       const previousHistory = await this.chatHistoryService.getHistory(id);
       const apiKey = await this.getUserApiKey(req);
+      this.logger.debug(
+        `chat request (videoId=${id}, historyCount=${previousHistory.length}, hasApiKey=${Boolean(apiKey)}, requestId=${requestId})`,
+      );
       const result = await this.reviewService.chat(
         body.message,
         previousHistory,
@@ -186,6 +202,12 @@ export class PracticeReviewController {
       );
       return { reply: result.reply, actions: result.actions };
     } catch (error) {
+      const errorMessage =
+        error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+      this.logger.error(
+        `chat request failed (videoId=${id}, requestId=${requestId}): ${errorMessage}`,
+        error instanceof Error ? error.stack : undefined,
+      );
       return {
         reply:
           'Sorry, there was an error reaching the AI coach. Please try again.',
@@ -227,6 +249,10 @@ export class PracticeReviewController {
     const bTime = parseFloat(bTimeStr || '120') || 120;
     const chunkNumber = Math.max(1, parseInt(chunkNumberStr || '1', 10));
     const apiKey = await this.getUserApiKey(req);
+    const requestId = this.getRequestId(req);
+    this.logger.debug(
+      `chunk request (videoId=${id}, chunk=${chunkNumber}, range=${aTime}-${bTime}, hasApiKey=${Boolean(apiKey)}, requestId=${requestId})`,
+    );
     return this.buildChunkReview(
       video,
       aTime,
@@ -237,6 +263,7 @@ export class PracticeReviewController {
       false,
       songInfo,
       apiKey,
+      requestId,
     );
   }
 
@@ -260,6 +287,7 @@ export class PracticeReviewController {
     forceRegenerate = false,
     songInfo?: string,
     apiKey?: string,
+    requestId?: string,
   ) {
     const chunkStart = aTime + (chunkNumber - 1) * this.CHUNK_DURATION_SECONDS;
     const chunkEnd = Math.min(bTime, chunkStart + this.CHUNK_DURATION_SECONDS);
@@ -283,6 +311,9 @@ export class PracticeReviewController {
         chunkNumber,
       );
       if (saved) {
+        this.logger.debug(
+          `chunk cache hit (videoId=${video.id}, chunk=${chunkNumber}, requestId=${requestId ?? 'n/a'})`,
+        );
         return {
           ...saved.reviewData,
           cached: true,
@@ -319,6 +350,9 @@ export class PracticeReviewController {
           setTimeout(() => reject(new Error('AI analysis timeout')), 45000),
         ),
       ])) as any;
+      this.logger.log(
+        `chunk analysis complete (videoId=${video.id}, chunk=${chunkNumber}, source=${review.analysisSource ?? 'unknown'}, forceRegenerate=${forceRegenerate}, requestId=${requestId ?? 'n/a'})`,
+      );
 
       let segments = review.segments || [];
       if (!segments.length) {
@@ -372,7 +406,12 @@ export class PracticeReviewController {
       );
       return result;
     } catch (error) {
-      console.error('Error analyzing chunk:', error);
+      const errorMessage =
+        error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+      this.logger.error(
+        `chunk analysis failed (videoId=${video.id}, chunk=${chunkNumber}, forceRegenerate=${forceRegenerate}, requestId=${requestId ?? 'n/a'}): ${errorMessage}`,
+        error instanceof Error ? error.stack : undefined,
+      );
       return {
         chunkNumber,
         totalChunks,
@@ -735,6 +774,17 @@ export class PracticeReviewController {
 
     const [scheme, token] = authorization.split(' ');
     return scheme === 'Bearer' && token ? token : null;
+  }
+
+  private getRequestId(req?: Request): string {
+    const headerValue = req?.headers['x-request-id'];
+    if (typeof headerValue === 'string' && headerValue.trim()) {
+      return headerValue.trim();
+    }
+    if (Array.isArray(headerValue) && headerValue[0]?.trim()) {
+      return headerValue[0].trim();
+    }
+    return randomUUID().slice(0, 8);
   }
 
   private estimateDurationSeconds(video: PracticeVideoEntity): number {

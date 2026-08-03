@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 
 export interface ReviewSegment {
   startTime: number;
@@ -43,6 +43,7 @@ export type ChatAction =
 
 @Injectable()
 export class PracticeReviewService {
+  private readonly logger = new Logger(PracticeReviewService.name);
   private readonly modelApiKey =
     process.env.OPENAI_API_KEY ?? process.env.OPENAI_KEY;
   private readonly modelEndpoint = this.normalizeBaseUrl(
@@ -78,10 +79,14 @@ export class PracticeReviewService {
           effectiveApiKey,
         );
       } catch (error) {
-        console.warn(
-          'AI review unavailable, falling back to heuristic analysis.',
-          error,
+        const errorMessage =
+          error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+        this.logger.warn(
+          `AI review unavailable, falling back to heuristic analysis (${errorMessage})`,
         );
+        if (error instanceof Error) {
+          this.logger.debug(error.stack);
+        }
       }
     }
 
@@ -184,6 +189,9 @@ ${userContextSection}
 Previous feedback:
 ${feedbackSection}
 `;
+    this.logger.debug(
+      `reviewWithAi request (model=${this.modelName}, duration=${durationSeconds}s, beats=${audioBeatCount}, movementScore=${movementScore}, hasUserFeedback=${Boolean(userFeedback?.trim())}, hasUserContext=${Boolean(userContext?.trim())}, hasSongInfo=${Boolean(songInfo?.trim())})`,
+    );
     const response = await fetch(this.buildChatUrl(), {
       method: 'POST',
       headers: {
@@ -206,6 +214,14 @@ ${feedbackSection}
     });
 
     if (!response.ok) {
+      const errorBody =
+        typeof response.text === 'function'
+          ? await response.text().catch(() => '')
+          : '';
+      const compactBody = errorBody.slice(0, 500).replace(/\s+/g, ' ').trim();
+      this.logger.error(
+        `AI review HTTP error (status=${response.status}, body=${compactBody || 'n/a'})`,
+      );
       throw new Error(`AI request failed with status ${response.status}`);
     }
 
@@ -450,6 +466,9 @@ ${feedbackSection}
         actions: [],
       };
     }
+    this.logger.debug(
+      `chat request (model=${this.modelName}, historyCount=${history.length}, hasReviewContext=${Boolean(reviewContext?.trim())})`,
+    );
 
     const systemContent = `You are a bachata musicality and rhythm coach with direct control over the video player.
 
@@ -489,6 +508,14 @@ Focus on rhythm, timing, energy, and musicality. Be encouraging and specific.${r
     });
 
     if (!response.ok) {
+      const errorBody =
+        typeof response.text === 'function'
+          ? await response.text().catch(() => '')
+          : '';
+      const compactBody = errorBody.slice(0, 500).replace(/\s+/g, ' ').trim();
+      this.logger.error(
+        `AI chat HTTP error (status=${response.status}, body=${compactBody || 'n/a'})`,
+      );
       throw new Error(`AI chat request failed: ${response.status}`);
     }
 
