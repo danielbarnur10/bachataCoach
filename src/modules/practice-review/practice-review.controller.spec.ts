@@ -1,7 +1,12 @@
 import { PracticeReviewController } from './practice-review.controller';
 import { PracticeVideoEntity } from './practice-video.entity';
 
-function makeVideo(id = 'video-1', filename = 'test.mp4'): PracticeVideoEntity {
+function makeVideo(
+  id = 'video-1',
+  filename = 'test.mp4',
+  ownerId = 'owner-1',
+  visibility: 'private' | 'shared' = 'private',
+): PracticeVideoEntity {
   return new PracticeVideoEntity(
     id,
     'Test Video',
@@ -9,10 +14,17 @@ function makeVideo(id = 'video-1', filename = 'test.mp4'): PracticeVideoEntity {
     new Date().toISOString(),
     'video/mp4',
     10_000_000,
+    ownerId,
+    'Coach Owner',
+    visibility,
   );
 }
 
-function makeController(repoOverrides: any = {}, serviceOverrides: any = {}) {
+function makeController(
+  repoOverrides: any = {},
+  serviceOverrides: any = {},
+  userOverrides: any = {},
+) {
   const defaultReview = {
     summary: 'Summary',
     musicality: 'Good',
@@ -22,10 +34,13 @@ function makeController(repoOverrides: any = {}, serviceOverrides: any = {}) {
     analysisSource: 'heuristic' as const,
   };
   const repository = {
-    getById: jest.fn().mockResolvedValue(null),
+    getAccessibleById: jest.fn().mockResolvedValue(null),
+    getOwnedById: jest.fn().mockResolvedValue(null),
     create: jest.fn(),
-    list: jest.fn().mockResolvedValue([]),
-    delete: jest.fn(),
+    listOwned: jest.fn().mockResolvedValue([]),
+    listShared: jest.fn().mockResolvedValue([]),
+    setVisibility: jest.fn().mockResolvedValue(null),
+    deleteOwned: jest.fn().mockResolvedValue(true),
     ...repoOverrides,
   };
   const reviewService = {
@@ -43,17 +58,24 @@ function makeController(repoOverrides: any = {}, serviceOverrides: any = {}) {
     findAllForVideo: jest.fn().mockResolvedValue([]),
     upsert: jest.fn().mockResolvedValue(undefined),
   };
+  const usersService = {
+    findByToken: jest.fn().mockResolvedValue(null),
+    getAgentApiKeyForToken: jest.fn().mockResolvedValue(undefined),
+    ...userOverrides,
+  };
   return {
     controller: new PracticeReviewController(
       repository,
       reviewService,
       chatHistoryService as any,
       savedReviewService as any,
+      usersService as any,
     ),
     repository,
     reviewService,
     chatHistoryService,
     savedReviewService,
+    usersService,
   };
 }
 
@@ -81,16 +103,43 @@ describe('PracticeReviewController.estimateDurationSecondsFromBytes', () => {
 
 describe('PracticeReviewController.listVideos', () => {
   it('returns empty array when no videos exist', async () => {
-    const { controller } = makeController();
+    const { controller, usersService } = makeController();
+    usersService.findByToken.mockResolvedValue({ id: 'owner-1' });
     await expect(controller.listVideos()).resolves.toEqual([]);
   });
 
-  it('returns all videos from repository', async () => {
+  it('returns only videos owned by the signed-in user', async () => {
     const { controller } = makeController({
-      list: jest.fn().mockResolvedValue([makeVideo('1'), makeVideo('2')]),
+      listOwned: jest.fn().mockResolvedValue([makeVideo('1'), makeVideo('2')]),
+    }, {}, {
+      findByToken: jest.fn().mockResolvedValue({ id: 'owner-1' }),
     });
-    const result = await controller.listVideos();
+    const result = await controller.listVideos({
+      headers: { authorization: 'Bearer token' },
+    } as any);
     expect(result).toHaveLength(2);
+  });
+
+  it('returns no private videos when signed out', async () => {
+    const { controller } = makeController({
+      listOwned: jest.fn().mockResolvedValue([makeVideo('1')]),
+    });
+
+    await expect(controller.listVideos()).resolves.toEqual([]);
+  });
+});
+
+describe('PracticeReviewController.listSharedVideos', () => {
+  it('returns shared videos from the repository', async () => {
+    const { controller, repository } = makeController({
+      listShared: jest.fn().mockResolvedValue([
+        makeVideo('shared-1', 'one.mp4', 'owner-2', 'shared'),
+      ]),
+    });
+
+    const result = await controller.listSharedVideos();
+    expect(result).toHaveLength(1);
+    expect(repository.listShared).toHaveBeenCalledWith(null);
   });
 });
 
@@ -116,7 +165,9 @@ describe('PracticeReviewController.streamVideo', () => {
 
   it('returns a JSON error when the video file is missing from disk', async () => {
     const { controller } = makeController({
-      getById: jest.fn().mockResolvedValue(makeVideo('v1', 'no-such-file.mp4')),
+      getAccessibleById: jest
+        .fn()
+        .mockResolvedValue(makeVideo('v1', 'no-such-file.mp4')),
     });
     const r = res();
     await controller.streamVideo('v1', r as any, { headers: {} } as any);
@@ -140,7 +191,7 @@ describe('PracticeReviewController.startReview', () => {
 
   it('returns error when aTime >= bTime', async () => {
     const { controller } = makeController({
-      getById: jest.fn().mockResolvedValue(makeVideo()),
+      getAccessibleById: jest.fn().mockResolvedValue(makeVideo()),
     });
     const result = await controller.startReview('v1', { aTime: 30, bTime: 10 });
     expect(result).toEqual(
@@ -150,7 +201,7 @@ describe('PracticeReviewController.startReview', () => {
 
   it('calculates correct totalChunks for a 30-second interval (15s chunks)', async () => {
     const { controller } = makeController({
-      getById: jest.fn().mockResolvedValue(makeVideo()),
+      getAccessibleById: jest.fn().mockResolvedValue(makeVideo()),
     });
     const result = (await controller.startReview('v1', {
       aTime: 0,
@@ -163,7 +214,7 @@ describe('PracticeReviewController.startReview', () => {
 
   it('returns a reviewId', async () => {
     const { controller } = makeController({
-      getById: jest.fn().mockResolvedValue(makeVideo()),
+      getAccessibleById: jest.fn().mockResolvedValue(makeVideo()),
     });
     const result = (await controller.startReview('v1', {
       aTime: 0,
@@ -187,7 +238,7 @@ describe('PracticeReviewController.getChunk', () => {
 
   it('returns error when chunkNumber starts past bTime', async () => {
     const { controller } = makeController({
-      getById: jest.fn().mockResolvedValue(makeVideo()),
+      getAccessibleById: jest.fn().mockResolvedValue(makeVideo()),
     });
     // chunk 10 starts at (10-1)*15 = 135s, beyond bTime=30
     const result = await controller.getChunk('v1', '0', '30', '10');
@@ -198,7 +249,7 @@ describe('PracticeReviewController.getChunk', () => {
 
   it('returns correct chunk metadata for chunk 1', async () => {
     const { controller } = makeController({
-      getById: jest.fn().mockResolvedValue(makeVideo()),
+      getAccessibleById: jest.fn().mockResolvedValue(makeVideo()),
     });
     const result = await controller.getChunk('v1', '0', '30', '1');
     expect(result.chunkNumber).toBe(1);
@@ -209,7 +260,7 @@ describe('PracticeReviewController.getChunk', () => {
 
   it('marks hasNextChunk true for chunk 1 of 2', async () => {
     const { controller } = makeController({
-      getById: jest.fn().mockResolvedValue(makeVideo()),
+      getAccessibleById: jest.fn().mockResolvedValue(makeVideo()),
     });
     const result = await controller.getChunk('v1', '0', '30', '1');
     expect(result.hasNextChunk).toBe(true);
@@ -217,7 +268,7 @@ describe('PracticeReviewController.getChunk', () => {
 
   it('marks hasNextChunk false for the last chunk', async () => {
     const { controller } = makeController({
-      getById: jest.fn().mockResolvedValue(makeVideo()),
+      getAccessibleById: jest.fn().mockResolvedValue(makeVideo()),
     });
     const result = await controller.getChunk('v1', '0', '30', '2');
     expect(result.hasNextChunk).toBe(false);
@@ -225,7 +276,7 @@ describe('PracticeReviewController.getChunk', () => {
 
   it('calls reviewService.reviewVideo with the chunk duration', async () => {
     const { controller, reviewService } = makeController({
-      getById: jest.fn().mockResolvedValue(makeVideo()),
+      getAccessibleById: jest.fn().mockResolvedValue(makeVideo()),
     });
     await controller.getChunk('v1', '0', '15', '1');
     expect(reviewService.reviewVideo).toHaveBeenCalledWith(
@@ -237,7 +288,7 @@ describe('PracticeReviewController.getChunk', () => {
 
   it('returns fallback data when reviewService throws', async () => {
     const { controller } = makeController(
-      { getById: jest.fn().mockResolvedValue(makeVideo()) },
+      { getAccessibleById: jest.fn().mockResolvedValue(makeVideo()) },
       { reviewVideo: jest.fn().mockRejectedValue(new Error('AI down')) },
     );
     const result = await controller.getChunk('v1', '0', '30', '1');
@@ -260,7 +311,7 @@ describe('PracticeReviewController.regenerateReview', () => {
 
   it('passes userFeedback to reviewService.reviewVideo', async () => {
     const { controller, reviewService } = makeController({
-      getById: jest.fn().mockResolvedValue(makeVideo()),
+      getAccessibleById: jest.fn().mockResolvedValue(makeVideo()),
     });
     await controller.regenerateReview('v1', {
       aTime: 0,
@@ -277,7 +328,7 @@ describe('PracticeReviewController.regenerateReview', () => {
 
   it('returns the same shape as getChunk', async () => {
     const { controller } = makeController({
-      getById: jest.fn().mockResolvedValue(makeVideo()),
+      getAccessibleById: jest.fn().mockResolvedValue(makeVideo()),
     });
     const result = await controller.regenerateReview('v1', {
       aTime: 0,
@@ -315,7 +366,9 @@ describe('PracticeReviewController.chat', () => {
   });
 
   it('delegates to reviewService.chat and wraps the reply', async () => {
-    const { controller, reviewService } = makeController();
+    const { controller, reviewService } = makeController({
+      getAccessibleById: jest.fn().mockResolvedValue(makeVideo()),
+    });
     (reviewService.chat as jest.Mock).mockResolvedValue({
       reply: 'Great timing!',
       actions: [],
@@ -328,7 +381,9 @@ describe('PracticeReviewController.chat', () => {
   });
 
   it('includes actions in the response', async () => {
-    const { controller, reviewService } = makeController();
+    const { controller, reviewService } = makeController({
+      getAccessibleById: jest.fn().mockResolvedValue(makeVideo()),
+    });
     const actions = [{ type: 'seek', time: 30 }];
     (reviewService.chat as jest.Mock).mockResolvedValue({
       reply: 'Jump to 0:30',
@@ -341,7 +396,10 @@ describe('PracticeReviewController.chat', () => {
   });
 
   it('uses server-side history from chatHistoryService', async () => {
-    const { controller, reviewService, chatHistoryService } = makeController();
+    const { controller, reviewService, chatHistoryService, repository } =
+      makeController({
+        getAccessibleById: jest.fn().mockResolvedValue(makeVideo()),
+      });
     const history = [
       {
         role: 'user' as const,
@@ -357,10 +415,91 @@ describe('PracticeReviewController.chat', () => {
       undefined,
       undefined,
     );
+    expect(repository.getAccessibleById).toHaveBeenCalledWith('v1', null);
+  });
+
+  it('returns not found for a private video the viewer cannot access', async () => {
+    const { controller } = makeController();
+    const result = await controller.chat('v1', { message: 'Hi' });
+    expect(result).toEqual(
+      expect.objectContaining({ error: expect.any(String) }),
+    );
+  });
+});
+
+describe('PracticeReviewController.video ownership', () => {
+  it('allows the owner to change visibility', async () => {
+    const { controller } = makeController(
+      {
+        setVisibility: jest
+          .fn()
+          .mockResolvedValue(makeVideo('v1', 'video.mp4', 'owner-1', 'shared')),
+      },
+      {},
+      { findByToken: jest.fn().mockResolvedValue({ id: 'owner-1' }) },
+    );
+
+    const result = await controller.updateVisibility(
+      'v1',
+      { visibility: 'shared' },
+      { headers: { authorization: 'Bearer token' } } as any,
+    );
+
+    expect(result.video.visibility).toBe('shared');
+  });
+
+  it('rejects visibility changes from non-owners', async () => {
+    const { controller } = makeController(
+      { setVisibility: jest.fn().mockResolvedValue(null) },
+      {},
+      { findByToken: jest.fn().mockResolvedValue({ id: 'owner-1' }) },
+    );
+
+    await expect(
+      controller.updateVisibility(
+        'v1',
+        { visibility: 'shared' },
+        { headers: { authorization: 'Bearer token' } } as any,
+      ),
+    ).rejects.toThrow('only update your own videos');
+  });
+
+  it('rejects upload when no user is signed in', async () => {
+    const { controller } = makeController();
+
+    await expect(
+      controller.uploadVideo(
+        {
+          originalname: 'test.mp4',
+          filename: 'stored.mp4',
+          mimetype: 'video/mp4',
+          size: 123,
+        },
+        { title: 'Title' },
+        { headers: {} } as any,
+      ),
+    ).rejects.toThrow('Please sign in first.');
+  });
+
+  it('rejects deleting another user\'s video', async () => {
+    const { controller } = makeController(
+      { getOwnedById: jest.fn().mockResolvedValue(null) },
+      {},
+      { findByToken: jest.fn().mockResolvedValue({ id: 'owner-1' }) },
+    );
+
+    await expect(
+      controller.deleteVideo(
+        'v1',
+        { headers: { authorization: 'Bearer token' } } as any,
+      ),
+    ).rejects.toThrow('only manage your own videos');
   });
 
   it('saves user message and assistant reply after successful chat', async () => {
-    const { controller, chatHistoryService } = makeController();
+    const { controller, chatHistoryService } = makeController({
+      getAccessibleById: jest.fn().mockResolvedValue(makeVideo()),
+    });
     await controller.chat('v1', { message: 'Hello' });
     expect(chatHistoryService.saveMessage).toHaveBeenCalledWith(
       'v1',
@@ -376,7 +515,9 @@ describe('PracticeReviewController.chat', () => {
   });
 
   it('passes reviewContext to reviewService', async () => {
-    const { controller, reviewService } = makeController();
+    const { controller, reviewService } = makeController({
+      getAccessibleById: jest.fn().mockResolvedValue(makeVideo()),
+    });
     await controller.chat('v1', {
       message: 'Question',
       reviewContext: '0s–30s',
@@ -390,7 +531,9 @@ describe('PracticeReviewController.chat', () => {
   });
 
   it('returns a fallback reply when reviewService throws', async () => {
-    const { controller, reviewService } = makeController();
+    const { controller, reviewService } = makeController({
+      getAccessibleById: jest.fn().mockResolvedValue(makeVideo()),
+    });
     (reviewService.chat as jest.Mock).mockRejectedValue(
       new Error('Network error'),
     );

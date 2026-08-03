@@ -1,14 +1,18 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   Optional,
   Param,
+  Patch,
   Post,
   Query,
   Req,
   Res,
+  UnauthorizedException,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
@@ -23,7 +27,10 @@ import { promisify } from 'util';
 import { stat } from 'fs/promises';
 import axios from 'axios';
 import ytdl from 'ytdl-core';
-import { PracticeVideoEntity } from './practice-video.entity';
+import {
+  PracticeVideoEntity,
+  PracticeVideoVisibility,
+} from './practice-video.entity';
 import { InMemoryVideoRepository } from './in-memory-video.repository';
 import { PracticeReviewService } from './practice-review.service';
 import { ChatHistoryService } from './chat-history.service';
@@ -51,21 +58,39 @@ export class PracticeReviewController {
   }
 
   @Get()
-  async listVideos(): Promise<PracticeVideoEntity[]> {
-    return this.videoRepository.list();
+  async listVideos(@Req() req?: Request): Promise<PracticeVideoEntity[]> {
+    const user = await this.getCurrentUser(req);
+    if (!user) {
+      return [];
+    }
+
+    return this.videoRepository.listOwned(user.id);
+  }
+
+  @Get('shared')
+  async listSharedVideos(@Req() req?: Request): Promise<PracticeVideoEntity[]> {
+    const user = await this.getCurrentUser(req);
+    return this.videoRepository.listShared(user?.id ?? null);
   }
 
   @Get(':id')
-  async getVideo(@Param('id') id: string): Promise<PracticeVideoEntity | null> {
-    return this.videoRepository.getById(id);
+  async getVideo(
+    @Param('id') id: string,
+    @Req() req?: Request,
+  ): Promise<PracticeVideoEntity | null> {
+    return this.videoRepository.getAccessibleById(
+      id,
+      (await this.getCurrentUser(req))?.id ?? null,
+    );
   }
 
   @Post(':id/review/start')
   async startReview(
     @Param('id') id: string,
     @Body() body: { aTime?: number; bTime?: number; reviewType?: string },
+    @Req() req?: Request,
   ) {
-    const video = await this.videoRepository.getById(id);
+    const video = await this.getAccessibleVideoOrNull(id, req);
     if (!video) {
       return { error: 'Video not found' };
     }
@@ -110,7 +135,7 @@ export class PracticeReviewController {
     },
     @Req() req?: Request,
   ) {
-    const video = await this.videoRepository.getById(id);
+    const video = await this.getAccessibleVideoOrNull(id, req);
     if (!video) return { error: 'Video not found' };
     const aTime = body.aTime ?? 0;
     const bTime = body.bTime ?? 120;
@@ -135,6 +160,11 @@ export class PracticeReviewController {
     @Body() body: { message?: string; reviewContext?: string },
     @Req() req?: Request,
   ) {
+    const video = await this.getAccessibleVideoOrNull(id, req);
+    if (!video) {
+      return { error: 'Video not found' };
+    }
+
     if (!body.message?.trim()) {
       return { error: 'Message is required' };
     }
@@ -165,12 +195,18 @@ export class PracticeReviewController {
   }
 
   @Get(':id/chat/history')
-  async getChatHistory(@Param('id') id: string) {
+  async getChatHistory(@Param('id') id: string, @Req() req?: Request) {
+    const video = await this.getAccessibleVideoOrNull(id, req);
+    if (!video) {
+      return { error: 'Video not found' };
+    }
+
     return this.chatHistoryService.getHistory(id);
   }
 
   @Delete(':id/chat/history')
-  async clearChatHistory(@Param('id') id: string) {
+  async clearChatHistory(@Param('id') id: string, @Req() req?: Request) {
+    await this.requireOwnedVideo(id, req);
     await this.chatHistoryService.clearHistory(id);
     return { success: true };
   }
@@ -185,7 +221,7 @@ export class PracticeReviewController {
     @Query('songInfo') songInfo?: string,
     @Req() req?: Request,
   ) {
-    const video = await this.videoRepository.getById(id);
+    const video = await this.getAccessibleVideoOrNull(id, req);
     if (!video) return { error: 'Video not found' };
     const aTime = parseFloat(aTimeStr || '0') || 0;
     const bTime = parseFloat(bTimeStr || '120') || 120;
@@ -205,7 +241,12 @@ export class PracticeReviewController {
   }
 
   @Get(':id/saved-reviews')
-  async listSavedReviews(@Param('id') id: string) {
+  async listSavedReviews(@Param('id') id: string, @Req() req?: Request) {
+    const video = await this.getAccessibleVideoOrNull(id, req);
+    if (!video) {
+      return { error: 'Video not found' };
+    }
+
     return this.savedReviewService.findAllForVideo(id);
   }
 
@@ -373,8 +414,8 @@ export class PracticeReviewController {
   }
 
   @Get(':id/review')
-  async getReview(@Param('id') id: string) {
-    const video = await this.videoRepository.getById(id);
+  async getReview(@Param('id') id: string, @Req() req?: Request) {
+    const video = await this.getAccessibleVideoOrNull(id, req);
     if (!video) {
       return { error: 'Video not found' };
     }
@@ -398,7 +439,7 @@ export class PracticeReviewController {
     @Res() res: Response,
     @Req() req: Request,
   ) {
-    const video = await this.videoRepository.getById(id);
+    const video = await this.getAccessibleVideoOrNull(id, req);
     if (!video) {
       res.status(404).json({ error: 'Video not found' });
       return;
@@ -427,7 +468,11 @@ export class PracticeReviewController {
   }
 
   @Post('upload-from-url')
-  async uploadFromUrl(@Body() body: { url: string; title?: string }) {
+  async uploadFromUrl(
+    @Body() body: { url: string; title?: string },
+    @Req() req?: Request,
+  ) {
+    const user = await this.requireCurrentUser(req);
     const url = body.url?.trim();
     if (!url) {
       return { error: 'URL is required' };
@@ -513,6 +558,9 @@ export class PracticeReviewController {
           new Date().toISOString(),
           'video/mp4',
           fileStats.size,
+          user.id,
+          user.displayName || user.email,
+          'private',
         );
 
         await this.videoRepository.create(video);
@@ -568,9 +616,14 @@ export class PracticeReviewController {
     @Body() body: { title?: string },
     @Req() req?: Request,
   ) {
+    const user = await this.requireCurrentUser(req);
     const apiKey = await this.getUserApiKey(req);
     const title = body.title ?? file?.originalname ?? 'Untitled video';
     const fileName = file.filename ?? file.originalname;
+
+    if (!file) {
+      throw new BadRequestException('Please choose a video file.');
+    }
 
     const video = new PracticeVideoEntity(
       randomUUID(),
@@ -579,6 +632,9 @@ export class PracticeReviewController {
       new Date().toISOString(),
       file.mimetype,
       file.size,
+      user.id,
+      user.displayName || user.email,
+      'private',
     );
 
     await this.videoRepository.create(video);
@@ -602,17 +658,83 @@ export class PracticeReviewController {
     };
   }
 
-  private async getUserApiKey(req?: Request): Promise<string | undefined> {
-    if (!req?.headers.authorization || !this.usersService) {
-      return undefined;
+  @Patch(':id/visibility')
+  async updateVisibility(
+    @Param('id') id: string,
+    @Body() body: { visibility?: PracticeVideoVisibility },
+    @Req() req?: Request,
+  ) {
+    const user = await this.requireCurrentUser(req);
+    const visibility = body.visibility;
+    if (visibility !== 'private' && visibility !== 'shared') {
+      throw new BadRequestException(
+        'Visibility must be either private or shared.',
+      );
     }
 
-    const [scheme, token] = req.headers.authorization.split(' ');
-    if (scheme !== 'Bearer' || !token) {
+    const video = await this.videoRepository.setVisibility(id, user.id, visibility);
+    if (!video) {
+      throw new ForbiddenException('You can only update your own videos.');
+    }
+
+    return { video };
+  }
+
+  private async getUserApiKey(req?: Request): Promise<string | undefined> {
+    const token = this.extractToken(req);
+    if (!token || !this.usersService) {
       return undefined;
     }
 
     return this.usersService.getAgentApiKeyForToken(token);
+  }
+
+  private async getCurrentUser(req?: Request) {
+    const token = this.extractToken(req);
+    if (!token || !this.usersService) {
+      return null;
+    }
+
+    return this.usersService.findByToken(token);
+  }
+
+  private async requireCurrentUser(req?: Request) {
+    const user = await this.getCurrentUser(req);
+    if (!user) {
+      throw new UnauthorizedException('Please sign in first.');
+    }
+
+    return user;
+  }
+
+  private async getAccessibleVideoOrNull(id: string, req?: Request) {
+    return this.videoRepository.getAccessibleById(
+      id,
+      (await this.getCurrentUser(req))?.id ?? null,
+    );
+  }
+
+  private async requireOwnedVideo(id: string, req?: Request) {
+    const user = await this.requireCurrentUser(req);
+    const video = await this.videoRepository.getOwnedById(id, user.id);
+    if (!video) {
+      throw new ForbiddenException('You can only manage your own videos.');
+    }
+
+    return { user, video };
+  }
+
+  private extractToken(req?: Request): string | null {
+    const authorization = req?.headers.authorization;
+    if (!authorization) {
+      const tokenFromQuery = req?.query?.token;
+      return typeof tokenFromQuery === 'string' && tokenFromQuery
+        ? tokenFromQuery
+        : null;
+    }
+
+    const [scheme, token] = authorization.split(' ');
+    return scheme === 'Bearer' && token ? token : null;
   }
 
   private estimateDurationSeconds(video: PracticeVideoEntity): number {
@@ -656,8 +778,16 @@ export class PracticeReviewController {
   }
 
   @Delete(':id')
-  async deleteVideo(@Param('id') id: string): Promise<{ success: boolean }> {
-    await this.videoRepository.delete(id);
+  async deleteVideo(
+    @Param('id') id: string,
+    @Req() req?: Request,
+  ): Promise<{ success: boolean }> {
+    const { user } = await this.requireOwnedVideo(id, req);
+    const deleted = await this.videoRepository.deleteOwned(id, user.id);
+    if (!deleted) {
+      throw new ForbiddenException('You can only delete your own videos.');
+    }
+
     return { success: true };
   }
 }

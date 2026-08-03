@@ -1,3 +1,5 @@
+export type PracticeVideoVisibility = 'private' | 'shared';
+
 export class PracticeVideoEntity {
   constructor(
     public readonly id: string,
@@ -6,5 +8,8 @@ export class PracticeVideoEntity {
     public readonly uploadedAt: string,
     public readonly mimeType: string,
     public readonly sizeBytes: number,
+    public readonly ownerId: string,
+    public readonly ownerDisplayName: string,
+    public visibility: PracticeVideoVisibility = 'private',
   ) {}
 }

@@ -148,9 +148,17 @@
 
       .pill-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
       .pill { padding: 8px 12px; border-radius: 999px; background: rgba(244,63,94,0.18); color: #fda4af; font-size: 0.95rem; }
+      .pill.subtle { background: var(--item-bg); color: var(--muted); border: 1px solid var(--border); }
 
       .grid { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 20px; }
       .panel { background: var(--panel-bg); border: 1px solid var(--border); border-radius: 18px; padding: 18px; }
+      .video-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 4px; margin: 14px 0 10px; background: var(--item-bg); border: 1px solid var(--border); border-radius: 12px; }
+      .video-tab { background: transparent; color: var(--muted); }
+      .video-tab.active { background: linear-gradient(90deg, var(--accent), var(--accent-2)); color: #fff; }
+      .video-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+      .visibility-chip { padding: 4px 10px; border-radius: 999px; font-size: 0.8rem; font-weight: 700; }
+      .visibility-chip.private { background: rgba(148, 163, 184, 0.18); color: #cbd5e1; }
+      .visibility-chip.shared { background: rgba(16, 185, 129, 0.18); color: #6ee7b7; }
       .controls { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
       input, select, button, textarea {
         font: inherit;
@@ -181,6 +189,39 @@
       .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
       .danger { background: #dc2626; }
       .theme-btn { position: fixed; top: 20px; right: 24px; z-index: 100; padding: 8px 14px; border-radius: 999px; font-size: 1rem; background: var(--card-bg); border: 1px solid var(--border) !important; color: var(--text); cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+      .account-btn { position: fixed; top: 20px; right: 82px; z-index: 100; display: flex; align-items: center; gap: 7px; max-width: 190px; padding: 8px 13px; background: var(--card-bg); border: 1px solid var(--border) !important; color: var(--text); box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+      .account-btn span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .auth-dialog { width: min(440px, calc(100vw - 32px)); padding: 0; color: var(--text); background: var(--card-bg); border: 1px solid var(--border); border-radius: 18px; box-shadow: 0 28px 80px rgba(0,0,0,0.4); }
+      .auth-dialog::backdrop { background: rgba(2, 6, 23, 0.72); backdrop-filter: blur(5px); }
+      .auth-shell { padding: 24px; }
+      .auth-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+      .auth-header h2 { margin: 0 0 4px; }
+      .auth-close { width: 38px; height: 38px; padding: 0; flex: 0 0 38px; background: var(--item-bg); border: 1px solid var(--border); color: var(--text); font-size: 1.25rem; }
+      .auth-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; margin-bottom: 18px; background: var(--item-bg); border: 1px solid var(--border); border-radius: 12px; }
+      .auth-tab { border-radius: 8px; background: transparent; color: var(--muted); }
+      .auth-tab.active { background: linear-gradient(90deg, var(--accent), var(--accent-2)); color: #fff; }
+      .auth-form { display: grid; gap: 12px; }
+      .auth-form[hidden] { display: none; }
+      .auth-form label { display: grid; gap: 6px; font-size: 0.9rem; font-weight: 700; }
+      .auth-form input { width: 100%; border-radius: 10px; }
+      .auth-submit { width: 100%; margin-top: 4px; border-radius: 10px; padding: 12px; }
+      .auth-status { min-height: 22px; margin: 12px 0 0; font-size: 0.9rem; color: var(--muted); }
+      .auth-status.error { color: #fb7185; }
+      .account-summary { display: flex; align-items: center; gap: 12px; padding: 14px; margin-bottom: 18px; background: var(--item-bg); border: 1px solid var(--border); border-radius: 12px; }
+      .account-avatar { display: grid; width: 44px; height: 44px; flex: 0 0 44px; place-items: center; border-radius: 50%; background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; font-weight: 800; }
+      .account-summary strong, .account-summary span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .account-summary > div:last-child { min-width: 0; }
+      .account-actions { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+      .secondary-btn { background: var(--item-bg); border: 1px solid var(--border); color: var(--text); }
+      @media (max-width: 640px) {
+        body { padding-top: 72px; }
+        .grid { grid-template-columns: minmax(0, 1fr); }
+        .card, .panel, .controls > input { min-width: 0; }
+        .controls > input { width: 100%; }
+        .account-btn { left: 16px; right: auto; max-width: calc(100vw - 88px); }
+        .theme-btn { right: 16px; }
+        .auth-shell { padding: 20px; }
+      }
       /* Icon is CSS-driven so it's correct before JS runs */
       #themeBtn .i-dark { display: inline; }
       #themeBtn .i-light { display: none; }
@@ -190,6 +231,57 @@
   </head>
   <body>
     <button class="theme-btn" onclick="toggleTheme()" id="themeBtn" title="Toggle light/dark mode">🌙</button>
+    <button class="account-btn" onclick="openAuthDialog()" id="accountBtn" title="Open account" aria-label="Open account">
+      <span aria-hidden="true">♙</span>
+      <span id="accountBtnLabel">Sign in</span>
+    </button>
+    <dialog class="auth-dialog" id="authDialog" aria-labelledby="authTitle">
+      <div class="auth-shell">
+        <div class="auth-header">
+          <div>
+            <h2 id="authTitle">Your account</h2>
+            <span class="small muted" id="authSubtitle">Keep your coaching preferences with you.</span>
+          </div>
+          <button class="auth-close" type="button" onclick="closeAuthDialog()" aria-label="Close account dialog">×</button>
+        </div>
+
+        <div id="signedOutView">
+          <div class="auth-tabs" role="tablist" aria-label="Account access">
+            <button class="auth-tab active" id="loginTab" type="button" role="tab" aria-selected="true" onclick="setAuthMode('login')">Sign in</button>
+            <button class="auth-tab" id="registerTab" type="button" role="tab" aria-selected="false" onclick="setAuthMode('register')">Create account</button>
+          </div>
+          <form class="auth-form" id="loginForm" onsubmit="submitLogin(event)">
+            <label>Email<input id="loginEmail" type="email" autocomplete="email" required /></label>
+            <label>Password<input id="loginPassword" type="password" autocomplete="current-password" required /></label>
+            <button class="auth-submit" type="submit">Sign in</button>
+          </form>
+          <form class="auth-form" id="registerForm" onsubmit="submitRegistration(event)" hidden>
+            <label>Display name<input id="registerName" type="text" autocomplete="name" maxlength="80" /></label>
+            <label>Email<input id="registerEmail" type="email" autocomplete="email" required /></label>
+            <label>Password<input id="registerPassword" type="password" autocomplete="new-password" minlength="8" required /></label>
+            <button class="auth-submit" type="submit">Create account</button>
+          </form>
+        </div>
+
+        <div id="signedInView" hidden>
+          <div class="account-summary">
+            <div class="account-avatar" id="accountAvatar">B</div>
+            <div><strong id="accountName">Bachata Dancer</strong><span class="small muted" id="accountEmail"></span></div>
+          </div>
+          <form class="auth-form" onsubmit="saveAccountSettings(event)">
+            <label>Display name<input id="settingsName" type="text" autocomplete="name" maxlength="80" /></label>
+            <label>AI provider key<input id="settingsApiKey" type="password" autocomplete="off" placeholder="Add a personal API key" /></label>
+            <span class="small muted" id="apiKeyState"></span>
+            <button class="auth-submit" type="submit">Save settings</button>
+            <div class="account-actions">
+              <button class="secondary-btn" id="removeApiKeyBtn" type="button" onclick="removeAgentApiKey()">Remove API key</button>
+              <button class="danger" type="button" onclick="logoutUser()">Sign out</button>
+            </div>
+          </form>
+        </div>
+        <p class="auth-status" id="authStatus" role="status" aria-live="polite"></p>
+      </div>
+    </dialog>
     <div class="app">
       <div class="card hero">
         <div>
@@ -207,6 +299,11 @@
       <div class="grid">
         <div class="card panel">
           <h2>Upload and manage videos</h2>
+          <div class="video-tabs" role="tablist" aria-label="Video visibility lists">
+            <button id="myVideosTab" class="video-tab active" type="button" onclick="setVideoTab('mine')">My Videos</button>
+            <button id="sharedVideosTab" class="video-tab" type="button" onclick="setVideoTab('shared')">Shared Videos</button>
+          </div>
+          <div id="videoScopeHint" class="small muted">Your uploads stay private until you choose to share them.</div>
           <div class="controls">
             <input id="titleInput" type="text" placeholder="Video title" />
             <input id="fileInput" type="file" accept="video/*" />
@@ -258,6 +355,10 @@
     <script>
       const state = {
         videos: [],
+        sharedVideos: [],
+        activeVideoTab: 'mine',
+        authToken: localStorage.getItem('bachataAuthToken'),
+        currentUser: null,
         selectedVideoId: null,
         reviewState: null,
         chatHistory: [],
@@ -267,14 +368,263 @@
         savedReviews: [],
       };
 
+      function openAuthDialog() {
+        renderAuthState();
+        document.getElementById('authDialog').showModal();
+        setTimeout(() => {
+          const target = state.currentUser ? document.getElementById('settingsName') : document.getElementById('loginEmail');
+          target?.focus();
+        }, 0);
+      }
+
+      function closeAuthDialog() {
+        document.getElementById('authDialog').close();
+        setAuthStatus('');
+      }
+
+      function setAuthMode(mode) {
+        const isLogin = mode === 'login';
+        document.getElementById('loginForm').hidden = !isLogin;
+        document.getElementById('registerForm').hidden = isLogin;
+        document.getElementById('loginTab').classList.toggle('active', isLogin);
+        document.getElementById('registerTab').classList.toggle('active', !isLogin);
+        document.getElementById('loginTab').setAttribute('aria-selected', String(isLogin));
+        document.getElementById('registerTab').setAttribute('aria-selected', String(!isLogin));
+        setAuthStatus('');
+      }
+
+      function setAuthStatus(message, isError = false) {
+        const status = document.getElementById('authStatus');
+        status.textContent = message;
+        status.classList.toggle('error', isError);
+      }
+
+      async function parseApiResponse(response) {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          const message = Array.isArray(data.message) ? data.message.join(' ') : data.message;
+          throw new Error(message || 'The request could not be completed.');
+        }
+        return data;
+      }
+
+      function authorizedFetch(url, options = {}) {
+        return fetch(url, {
+          ...options,
+          headers: {
+            ...(options.headers || {}),
+            ...authHeaders(),
+          },
+        });
+      }
+
+      function authHeaders() {
+        return state.authToken ? { Authorization: `Bearer ${state.authToken}` } : {};
+      }
+
+      function storeSession(data) {
+        state.authToken = data.token;
+        state.currentUser = data.user;
+        localStorage.setItem('bachataAuthToken', data.token);
+        renderAuthState();
+        void refreshVideos();
+      }
+
+      function clearSession() {
+        state.authToken = null;
+        state.currentUser = null;
+        localStorage.removeItem('bachataAuthToken');
+        renderAuthState();
+        void refreshVideos();
+      }
+
+      function renderAuthState() {
+        const user = state.currentUser;
+        document.getElementById('signedOutView').hidden = Boolean(user);
+        document.getElementById('signedInView').hidden = !user;
+        document.getElementById('accountBtnLabel').textContent = user?.displayName || 'Sign in';
+        document.getElementById('authSubtitle').textContent = user ? 'Manage your coaching identity and AI access.' : 'Keep your coaching preferences with you.';
+        renderVideoTabs();
+        if (!user) return;
+
+        document.getElementById('accountName').textContent = user.displayName || 'Bachata Dancer';
+        document.getElementById('accountEmail').textContent = user.email;
+        document.getElementById('accountAvatar').textContent = (user.displayName || user.email || 'B').charAt(0).toUpperCase();
+        document.getElementById('settingsName').value = user.displayName || '';
+        document.getElementById('settingsApiKey').value = '';
+        document.getElementById('settingsApiKey').placeholder = user.hasAgentApiKey ? 'Stored securely — enter a replacement' : 'Add a personal API key';
+        document.getElementById('apiKeyState').textContent = user.hasAgentApiKey ? 'A personal API key is saved.' : 'No personal API key saved.';
+        document.getElementById('removeApiKeyBtn').hidden = !user.hasAgentApiKey;
+      }
+
+      function setVideoTab(tab) {
+        state.activeVideoTab = tab;
+        renderVideoTabs();
+        renderFiles();
+      }
+
+      function renderVideoTabs() {
+        const mineTab = document.getElementById('myVideosTab');
+        const sharedTab = document.getElementById('sharedVideosTab');
+        const hint = document.getElementById('videoScopeHint');
+        const isMine = state.activeVideoTab === 'mine';
+        mineTab.classList.toggle('active', isMine);
+        sharedTab.classList.toggle('active', !isMine);
+        hint.textContent = isMine
+          ? (state.currentUser
+              ? 'Your uploads stay private until you choose to share them.'
+              : 'Sign in to see and manage your private uploads.')
+          : 'Videos here were explicitly shared by their owners.';
+      }
+
+      function getActiveVideos() {
+        return state.activeVideoTab === 'mine' ? state.videos : state.sharedVideos;
+      }
+
+      function getKnownVideo(id) {
+        return [...state.videos, ...state.sharedVideos].find((video) => video.id === id) || null;
+      }
+
+      function resetSelectedVideoState() {
+        state.selectedVideoId = null;
+        state.reviewState = null;
+        state.chatHistory = [];
+        state.currentChunk = 1;
+        state.savedReviews = [];
+        document.getElementById('playerPanel').innerHTML = '<p class="muted">Select a video to watch and review.</p>';
+        document.getElementById('reviewPanel').innerHTML = '<p class="muted">AI feedback will appear here after upload.</p>';
+        document.getElementById('chatMessages').innerHTML = '';
+        const regenerateArea = document.getElementById('regenerateArea');
+        if (regenerateArea) regenerateArea.style.display = 'none';
+      }
+
+      async function submitLogin(event) {
+        event.preventDefault();
+        setAuthStatus('Signing in…');
+        try {
+          const response = await fetch('/users/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: document.getElementById('loginEmail').value,
+              password: document.getElementById('loginPassword').value,
+            }),
+          });
+          storeSession(await parseApiResponse(response));
+          document.getElementById('loginForm').reset();
+          setAuthStatus('Signed in.');
+        } catch (error) {
+          setAuthStatus(error.message, true);
+        }
+      }
+
+      async function submitRegistration(event) {
+        event.preventDefault();
+        setAuthStatus('Creating your account…');
+        try {
+          const response = await fetch('/users/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              displayName: document.getElementById('registerName').value,
+              email: document.getElementById('registerEmail').value,
+              password: document.getElementById('registerPassword').value,
+            }),
+          });
+          storeSession(await parseApiResponse(response));
+          document.getElementById('registerForm').reset();
+          setAuthStatus('Account created.');
+        } catch (error) {
+          setAuthStatus(error.message, true);
+        }
+      }
+
+      async function saveAccountSettings(event) {
+        event.preventDefault();
+        setAuthStatus('Saving settings…');
+        const apiKey = document.getElementById('settingsApiKey').value.trim();
+        const updates = { displayName: document.getElementById('settingsName').value };
+        if (apiKey) updates.agentApiKey = apiKey;
+        try {
+          const response = await fetch('/users/settings', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', ...authHeaders() },
+            body: JSON.stringify(updates),
+          });
+          const data = await parseApiResponse(response);
+          state.currentUser = data.user;
+          renderAuthState();
+          setAuthStatus('Settings saved.');
+        } catch (error) {
+          setAuthStatus(error.message, true);
+        }
+      }
+
+      async function removeAgentApiKey() {
+        setAuthStatus('Removing API key…');
+        try {
+          const response = await fetch('/users/settings', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', ...authHeaders() },
+            body: JSON.stringify({ agentApiKey: '' }),
+          });
+          const data = await parseApiResponse(response);
+          state.currentUser = data.user;
+          renderAuthState();
+          setAuthStatus('API key removed.');
+        } catch (error) {
+          setAuthStatus(error.message, true);
+        }
+      }
+
+      async function logoutUser() {
+        setAuthStatus('Signing out…');
+        try {
+          await fetch('/users/logout', { method: 'POST', headers: authHeaders() });
+        } finally {
+          clearSession();
+          setAuthMode('login');
+          setAuthStatus('Signed out.');
+        }
+      }
+
+      async function restoreAuthSession() {
+        if (!state.authToken) {
+          renderAuthState();
+          return;
+        }
+        try {
+          const response = await fetch('/users/me', { headers: authHeaders() });
+          const data = await parseApiResponse(response);
+          if (!data.user) {
+            clearSession();
+            return;
+          }
+          state.currentUser = data.user;
+          renderAuthState();
+        } catch {
+          clearSession();
+        }
+      }
+
       async function refreshVideos() {
         try {
-          const response = await fetch('/videos');
-          if (!response.ok) throw new Error('Unable to load videos');
-          state.videos = await response.json();
+          const [mineResponse, sharedResponse] = await Promise.all([
+            authorizedFetch('/videos'),
+            authorizedFetch('/videos/shared'),
+          ]);
+          if (!mineResponse.ok || !sharedResponse.ok) {
+            throw new Error('Unable to load videos');
+          }
+          state.videos = await mineResponse.json();
+          state.sharedVideos = await sharedResponse.json();
+          if (state.selectedVideoId && !getKnownVideo(state.selectedVideoId)) {
+            resetSelectedVideoState();
+          }
           renderFiles();
-          if (!state.selectedVideoId && state.videos.length) {
-            selectVideo(state.videos[0].id);
+          const activeVideos = getActiveVideos();
+          if (!state.selectedVideoId && activeVideos.length) {
+            selectVideo(activeVideos[0].id);
           }
         } catch (error) {
           document.getElementById('uploadStatus').textContent = 'Could not load videos from the backend.';
@@ -283,21 +633,32 @@
 
       function renderFiles() {
         const fileList = document.getElementById('fileList');
-        if (!state.videos.length) {
-          fileList.innerHTML = '<div class="item"><strong>No videos yet.</strong></div>';
+        const activeVideos = getActiveVideos();
+        if (state.activeVideoTab === 'mine' && !state.currentUser) {
+          fileList.innerHTML = '<div class="item"><strong>Sign in to see your private uploads.</strong><div class="small muted" style="margin-top:8px;">Use Shared Videos to browse videos that owners have explicitly shared.</div></div>';
           return;
         }
 
-        fileList.innerHTML = state.videos
+        if (!activeVideos.length) {
+          fileList.innerHTML = `<div class="item"><strong>${state.activeVideoTab === 'mine' ? 'No uploads yet.' : 'No shared videos available yet.'}</strong></div>`;
+          return;
+        }
+
+        fileList.innerHTML = activeVideos
           .map((video) => `
           <div class="item">
             <div class="row">
               <strong>${video.title}</strong>
               <span class="small muted">${video.filename}</span>
             </div>
+            <div class="video-meta">
+              <span class="visibility-chip ${video.visibility}">${video.visibility === 'shared' ? 'Shared' : 'Private'}</span>
+              ${state.activeVideoTab === 'shared' ? `<span class="pill subtle">Shared by ${video.ownerDisplayName || 'another dancer'}</span>` : ''}
+            </div>
             <div class="actions">
               <button onclick="selectVideo('${video.id}')">Open</button>
-              <button class="danger" onclick="deleteVideo('${video.id}')">Delete</button>
+              ${state.activeVideoTab === 'mine' ? `<button class="secondary-btn" onclick="updateVideoVisibility('${video.id}', '${video.visibility === 'shared' ? 'private' : 'shared'}')">${video.visibility === 'shared' ? 'Make private' : 'Share video'}</button>` : ''}
+              ${state.activeVideoTab === 'mine' ? `<button class="danger" onclick="deleteVideo('${video.id}')">Delete</button>` : ''}
             </div>
           </div>
         `)
@@ -305,7 +666,7 @@
       }
 
       async function selectVideo(id) {
-        const video = state.videos.find((item) => item.id === id);
+        const video = getKnownVideo(id);
         if (!video) return;
 
         stopLooping();
@@ -319,7 +680,8 @@
 
         // Load saved chat history for this video
         try {
-          const histRes = await fetch(`/videos/${id}/chat/history`);
+          const histRes = await authorizedFetch(`/videos/${id}/chat/history`);
+          if (!histRes.ok) throw new Error('History unavailable');
           const saved = await histRes.json();
           if (Array.isArray(saved) && saved.length) {
             saved.forEach((m) => appendChatBubble(m.role === 'user' ? 'user' : 'ai', m.content, m.actions));
@@ -330,7 +692,8 @@
 
         // Load saved AI reviews for this video
         try {
-          const revRes = await fetch(`/videos/${id}/saved-reviews`);
+          const revRes = await authorizedFetch(`/videos/${id}/saved-reviews`);
+          if (!revRes.ok) throw new Error('Saved reviews unavailable');
           const savedReviews = await revRes.json();
           state.savedReviews = Array.isArray(savedReviews) ? savedReviews : [];
           // Restore songInfo from the most recent saved review if available
@@ -344,6 +707,10 @@
           <div class="row">
             <h3>${video.title}</h3>
             <span class="small muted">${video.filename}</span>
+          </div>
+          <div class="video-meta" style="margin-bottom: 8px;">
+            <span class="visibility-chip ${video.visibility}">${video.visibility === 'shared' ? 'Shared video' : 'Private video'}</span>
+            ${video.ownerDisplayName ? `<span class="pill subtle">Owner: ${video.ownerDisplayName}</span>` : ''}
           </div>
           <div style="margin: 6px 0 10px;">
             <input id="songInfoInput" type="text" placeholder="🎵 Song name &amp; artist — e.g. Romeo Santos – Propuesta Indecente" style="width:100%; border-radius:10px; padding:7px 12px; font-size:0.9rem;" oninput="state.songInfo=this.value" />
@@ -430,7 +797,10 @@
         `;
 
         const videoEl = document.getElementById('videoPlayer');
-        videoEl.src = '/videos/' + video.id + '/file';
+        const fileUrl = state.authToken
+          ? `/videos/${video.id}/file?token=${encodeURIComponent(state.authToken)}`
+          : `/videos/${video.id}/file`;
+        videoEl.src = fileUrl;
         videoEl.onerror = () => {
           reviewPanel.innerHTML = '<p class="muted">The video could not be loaded. Please re-upload it or check the server logs.</p>';
         };
@@ -698,7 +1068,7 @@
         reviewPanel.innerHTML = `<p class="muted">⏳ Starting AI review of ${formatTime(aTime)}–${formatTime(bTime)} (${chunks} chunk${chunks > 1 ? 's' : ''})…</p>`;
 
         try {
-          const response = await fetch(`/videos/${videoId}/review/start`, {
+          const response = await authorizedFetch(`/videos/${videoId}/review/start`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ aTime, bTime }),
@@ -733,7 +1103,7 @@
         try {
           const ctx = state.userContext ? `&userContext=${encodeURIComponent(state.userContext)}` : '';
           const song = state.songInfo ? `&songInfo=${encodeURIComponent(state.songInfo)}` : '';
-          const response = await fetch(`/videos/${videoId}/review/chunk/${chunkNumber}?aTime=${aTime}&bTime=${bTime}${ctx}${song}`);
+          const response = await authorizedFetch(`/videos/${videoId}/review/chunk/${chunkNumber}?aTime=${aTime}&bTime=${bTime}${ctx}${song}`);
           if (!response.ok) throw new Error('Chunk unavailable');
           const data = await response.json();
           renderReviewPanel(videoId, data);
@@ -1030,7 +1400,7 @@
         }
 
         try {
-          const res = await fetch(`/videos/${state.selectedVideoId}/chat`, {
+          const res = await authorizedFetch(`/videos/${state.selectedVideoId}/chat`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ message, reviewContext }),
@@ -1062,7 +1432,7 @@
 
       async function clearChatHistory() {
         if (!state.selectedVideoId) return;
-        await fetch(`/videos/${state.selectedVideoId}/chat/history`, { method: 'DELETE' });
+        await authorizedFetch(`/videos/${state.selectedVideoId}/chat/history`, { method: 'DELETE' });
         state.chatHistory = [];
         document.getElementById('chatMessages').innerHTML = '';
         const area = document.getElementById('regenerateArea');
@@ -1084,7 +1454,7 @@
         }
         const typingId = appendChatBubble('ai', '⏳ Re-analyzing with your corrections…');
         try {
-          const res = await fetch(`/videos/${state.selectedVideoId}/review/regenerate`, {
+          const res = await authorizedFetch(`/videos/${state.selectedVideoId}/review/regenerate`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1108,16 +1478,35 @@
 
       async function deleteVideo(id) {
         try {
-          const response = await fetch('/videos/' + id, { method: 'DELETE' });
+          const response = await authorizedFetch('/videos/' + id, { method: 'DELETE' });
           if (!response.ok) throw new Error('Delete failed');
           state.selectedVideoId = null;
           await refreshVideos();
         } catch (error) {
-          document.getElementById('uploadStatus').textContent = 'Unable to delete the video.';
+          document.getElementById('uploadStatus').textContent = error.message || 'Unable to delete the video.';
+        }
+      }
+
+      async function updateVideoVisibility(id, visibility) {
+        try {
+          const response = await authorizedFetch(`/videos/${id}/visibility`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ visibility }),
+          });
+          await parseApiResponse(response);
+          await refreshVideos();
+        } catch (error) {
+          document.getElementById('uploadStatus').textContent = error.message || 'Unable to update sharing settings.';
         }
       }
 
       document.getElementById('uploadUrlBtn').addEventListener('click', async () => {
+        if (!state.currentUser) {
+          document.getElementById('urlStatus').textContent = 'Sign in before uploading a video.';
+          openAuthDialog();
+          return;
+        }
         const urlInput = document.getElementById('urlInput');
         const url = urlInput.value?.trim();
         if (!url) {
@@ -1137,7 +1526,7 @@
         document.getElementById('uploadUrlBtn').disabled = true;
 
         try {
-          const response = await fetch('/videos/upload-from-url', {
+          const response = await authorizedFetch('/videos/upload-from-url', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1146,7 +1535,9 @@
             }),
           });
 
-          const data = await response.json();
+          const data = response.ok
+            ? await response.json()
+            : await parseApiResponse(response);
 
           if (data.success) {
             urlStatus.innerHTML = `
@@ -1194,6 +1585,11 @@
       });
 
       document.getElementById('uploadBtn').addEventListener('click', async () => {
+        if (!state.currentUser) {
+          document.getElementById('uploadStatus').textContent = 'Sign in before uploading a video.';
+          openAuthDialog();
+          return;
+        }
         const fileInput = document.getElementById('fileInput');
         const titleInput = document.getElementById('titleInput');
         const file = fileInput.files[0];
@@ -1210,15 +1606,15 @@
         formData.append('title', titleInput.value || file.name);
 
         try {
-          const response = await fetch('/videos', { method: 'POST', body: formData });
-          const data = await response.json();
+          const response = await authorizedFetch('/videos', { method: 'POST', body: formData });
+          const data = await parseApiResponse(response);
           uploadStatus.textContent = `Upload complete. ${file.name} is ready to play.`;
           await refreshVideos();
           if (data.video) {
             selectVideo(data.video.id);
           }
         } catch (error) {
-          uploadStatus.textContent = 'Upload failed. Please try again.';
+          uploadStatus.textContent = error.message || 'Upload failed. Please try again.';
         }
       });
 
@@ -1242,6 +1638,10 @@
         document.getElementById('themeBtn').textContent = next === 'light' ? '🌙' : '☀️';
       }
 
+      document.getElementById('authDialog').addEventListener('click', (event) => {
+        if (event.target === event.currentTarget) closeAuthDialog();
+      });
+      restoreAuthSession();
       refreshVideos();
     </script>
   </body>
