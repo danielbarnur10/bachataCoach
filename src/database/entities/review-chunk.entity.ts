@@ -1,8 +1,22 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, OneToMany, JoinColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+  ManyToOne,
+  OneToMany,
+  JoinColumn,
+} from 'typeorm';
 import { ReviewEntity } from './review.entity';
 import { FeedbackItemEntity } from './feedback-item.entity';
 
-export type ChunkStatus = 'queued' | 'processing' | 'completed' | 'failed' | 'skipped';
+export type ChunkStatus =
+  | 'queued'
+  | 'processing'
+  | 'completed'
+  | 'failed'
+  | 'skipped';
 
 @Entity('review_chunks')
 export class ReviewChunkEntity {
@@ -12,7 +26,9 @@ export class ReviewChunkEntity {
   @Column()
   reviewId: string;
 
-  @ManyToOne(() => ReviewEntity, (review) => review.chunks, { onDelete: 'CASCADE' })
+  @ManyToOne(() => ReviewEntity, (review) => review.chunks, {
+    onDelete: 'CASCADE',
+  })
   @JoinColumn({ name: 'reviewId' })
   review: ReviewEntity;
 

@@ -1,4 +1,4 @@
-export class VideoEntity {
+export class PracticeVideoEntity {
   constructor(
     public readonly id: string,
     public readonly title: string,

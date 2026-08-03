@@ -7,11 +7,13 @@ import { GetLessonByIdUseCase } from './application/use-cases/get-lesson-by-id.u
 import { InMemoryLessonRepository } from './infrastructure/repositories/in-memory-lesson.repository';
 import { LessonsController } from './presentation/controllers/lessons.controller';
 import { HealthController } from './presentation/controllers/health.controller';
-import { VideosController } from './modules/videos/videos.controller';
-import { InMemoryVideoRepository } from './modules/videos/in-memory-video.repository';
-import { VideoReviewService } from './modules/videos/video-review.service';
-import { ChatHistoryService } from './modules/videos/chat-history.service';
-import { SavedReviewService } from './modules/videos/saved-review.service';
+import { PracticeReviewController } from './modules/practice-review/practice-review.controller';
+import { InMemoryVideoRepository } from './modules/practice-review/in-memory-video.repository';
+import { PracticeReviewService } from './modules/practice-review/practice-review.service';
+import { ChatHistoryService } from './modules/practice-review/chat-history.service';
+import { SavedReviewService } from './modules/practice-review/saved-review.service';
+import { UsersController } from './modules/users/users.controller';
+import { UsersService } from './modules/users/users.service';
 import {
   UserEntity,
   VideoEntity,
@@ -56,17 +58,31 @@ import {
       dropSchema: false,
       retryAttempts: 3,
       retryDelay: 1000,
-      ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false
+      ssl:
+        process.env.NODE_ENV === 'production'
+          ? { rejectUnauthorized: false }
+          : false,
     }),
-    TypeOrmModule.forFeature([ChatMessageEntity, SavedReviewEntity]),
+    TypeOrmModule.forFeature([
+      ChatMessageEntity,
+      SavedReviewEntity,
+      UserEntity,
+    ]),
   ],
-  controllers: [AppController, LessonsController, HealthController, VideosController],
+  controllers: [
+    AppController,
+    LessonsController,
+    HealthController,
+    PracticeReviewController,
+    UsersController,
+  ],
   providers: [
     AppService,
     GetLessonByIdUseCase,
-    VideoReviewService,
+    PracticeReviewService,
     ChatHistoryService,
     SavedReviewService,
+    UsersService,
     {
       provide: 'LessonRepository',
       useClass: InMemoryLessonRepository,

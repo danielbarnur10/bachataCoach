@@ -1,4 +1,13 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, OneToMany, JoinColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+  ManyToOne,
+  OneToMany,
+  JoinColumn,
+} from 'typeorm';
 import { UserEntity } from './user.entity';
 import { VideoEntity } from './video.entity';
 import { ReviewChunkEntity } from './review-chunk.entity';
@@ -22,7 +31,9 @@ export class ReviewEntity {
   @Column()
   videoId: string;
 
-  @ManyToOne(() => VideoEntity, (video) => video.reviews, { onDelete: 'CASCADE' })
+  @ManyToOne(() => VideoEntity, (video) => video.reviews, {
+    onDelete: 'CASCADE',
+  })
   @JoinColumn({ name: 'videoId' })
   video: VideoEntity;
 

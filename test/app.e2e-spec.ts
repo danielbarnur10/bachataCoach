@@ -5,15 +5,15 @@ import { App } from 'supertest/types';
 import { AppController } from '../src/app.controller';
 import { AppService } from '../src/app.service';
 import { HealthController } from '../src/presentation/controllers/health.controller';
-import { VideosController } from '../src/modules/videos/videos.controller';
-import { VideoReviewService } from '../src/modules/videos/video-review.service';
-import { InMemoryVideoRepository } from '../src/modules/videos/in-memory-video.repository';
+import { PracticeReviewController } from '../src/modules/practice-review/practice-review.controller';
+import { PracticeReviewService } from '../src/modules/practice-review/practice-review.service';
+import { InMemoryVideoRepository } from '../src/modules/practice-review/in-memory-video.repository';
 
 // Minimal module — no TypeORM/PostgreSQL required
 async function buildApp(): Promise<INestApplication<App>> {
   const moduleFixture: TestingModule = await Test.createTestingModule({
-    controllers: [AppController, HealthController, VideosController],
-    providers: [AppService, VideoReviewService, InMemoryVideoRepository],
+    controllers: [AppController, HealthController, PracticeReviewController],
+    providers: [AppService, PracticeReviewService, InMemoryVideoRepository],
   }).compile();
 
   const app = moduleFixture.createNestApplication();
@@ -24,19 +24,30 @@ async function buildApp(): Promise<INestApplication<App>> {
 describe('AppController (e2e)', () => {
   let app: INestApplication<App>;
 
-  beforeEach(async () => { app = await buildApp(); });
-  afterEach(async () => { await app.close(); });
+  beforeEach(async () => {
+    app = await buildApp();
+  });
+  afterEach(async () => {
+    await app.close();
+  });
 
   it('GET / returns Hello World', () => {
-    return request(app.getHttpServer()).get('/').expect(200).expect('Hello World!');
+    return request(app.getHttpServer())
+      .get('/')
+      .expect(200)
+      .expect('Hello World!');
   });
 });
 
 describe('HealthController (e2e)', () => {
   let app: INestApplication<App>;
 
-  beforeEach(async () => { app = await buildApp(); });
-  afterEach(async () => { await app.close(); });
+  beforeEach(async () => {
+    app = await buildApp();
+  });
+  afterEach(async () => {
+    await app.close();
+  });
 
   it('GET /health returns status ok', () => {
     return request(app.getHttpServer())
@@ -48,18 +59,24 @@ describe('HealthController (e2e)', () => {
   });
 });
 
-describe('VideosController (e2e)', () => {
+describe('PracticeReviewController (e2e)', () => {
   let app: INestApplication<App>;
 
-  beforeEach(async () => { app = await buildApp(); });
-  afterEach(async () => { await app.close(); });
+  beforeEach(async () => {
+    app = await buildApp();
+  });
+  afterEach(async () => {
+    await app.close();
+  });
 
   it('GET /videos returns empty array initially', () => {
     return request(app.getHttpServer()).get('/videos').expect(200).expect([]);
   });
 
   it('GET /videos/:id returns 200 with null for unknown id', async () => {
-    const res = await request(app.getHttpServer()).get('/videos/unknown-id').expect(200);
+    const res = await request(app.getHttpServer())
+      .get('/videos/unknown-id')
+      .expect(200);
     expect(res.body).toBeNull();
   });
 
@@ -77,8 +94,11 @@ describe('VideosController (e2e)', () => {
     // First upload a video so it exists
     const repo = new InMemoryVideoRepository();
     const moduleFixture = await Test.createTestingModule({
-      controllers: [VideosController],
-      providers: [VideoReviewService, { provide: InMemoryVideoRepository, useValue: repo }],
+      controllers: [PracticeReviewController],
+      providers: [
+        PracticeReviewService,
+        { provide: InMemoryVideoRepository, useValue: repo },
+      ],
     }).compile();
     const testApp = moduleFixture.createNestApplication();
     await testApp.init();
@@ -128,4 +148,3 @@ describe('VideosController (e2e)', () => {
       });
   });
 });
-

@@ -1,4 +1,17 @@
-import { Body, Controller, Delete, Get, Param, Post, Query, Req, Res, UploadedFile, UseInterceptors } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Optional,
+  Param,
+  Post,
+  Query,
+  Req,
+  Res,
+  UploadedFile,
+  UseInterceptors,
+} from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { randomUUID } from 'crypto';
 import { Request, Response } from 'express';
@@ -10,25 +23,27 @@ import { promisify } from 'util';
 import { stat } from 'fs/promises';
 import axios from 'axios';
 import ytdl from 'ytdl-core';
-import { VideoEntity } from './video.entity';
+import { PracticeVideoEntity } from './practice-video.entity';
 import { InMemoryVideoRepository } from './in-memory-video.repository';
-import { VideoReviewService } from './video-review.service';
+import { PracticeReviewService } from './practice-review.service';
 import { ChatHistoryService } from './chat-history.service';
 import { SavedReviewService } from './saved-review.service';
+import { UsersService } from '../users/users.service';
 
 const execAsync = promisify(exec);
 
 @Controller('videos')
-export class VideosController {
+export class PracticeReviewController {
   private readonly uploadDir: string = join(process.cwd(), 'uploads');
   private readonly CHUNK_DURATION_SECONDS = 15;
   private readonly MAX_CHUNK_DURATION_SECONDS = 20;
 
   constructor(
     private readonly videoRepository: InMemoryVideoRepository,
-    private readonly reviewService: VideoReviewService,
+    private readonly reviewService: PracticeReviewService,
     private readonly chatHistoryService: ChatHistoryService,
     private readonly savedReviewService: SavedReviewService,
+    @Optional() private readonly usersService?: UsersService,
   ) {
     if (!existsSync(this.uploadDir)) {
       mkdirSync(this.uploadDir, { recursive: true });
@@ -36,12 +51,12 @@ export class VideosController {
   }
 
   @Get()
-  async listVideos(): Promise<VideoEntity[]> {
+  async listVideos(): Promise<PracticeVideoEntity[]> {
     return this.videoRepository.list();
   }
 
   @Get(':id')
-  async getVideo(@Param('id') id: string): Promise<VideoEntity | null> {
+  async getVideo(@Param('id') id: string): Promise<PracticeVideoEntity | null> {
     return this.videoRepository.getById(id);
   }
 
@@ -64,7 +79,10 @@ export class VideosController {
     }
 
     const intervalDuration = bTime - aTime;
-    const totalChunks = Math.max(1, Math.ceil(intervalDuration / this.CHUNK_DURATION_SECONDS));
+    const totalChunks = Math.max(
+      1,
+      Math.ceil(intervalDuration / this.CHUNK_DURATION_SECONDS),
+    );
 
     return {
       reviewId: randomUUID(),
@@ -81,32 +99,68 @@ export class VideosController {
   @Post(':id/review/regenerate')
   async regenerateReview(
     @Param('id') id: string,
-    @Body() body: { aTime?: number; bTime?: number; chunkNumber?: number; feedback?: string; userContext?: string; songInfo?: string },
+    @Body()
+    body: {
+      aTime?: number;
+      bTime?: number;
+      chunkNumber?: number;
+      feedback?: string;
+      userContext?: string;
+      songInfo?: string;
+    },
+    @Req() req?: Request,
   ) {
     const video = await this.videoRepository.getById(id);
     if (!video) return { error: 'Video not found' };
     const aTime = body.aTime ?? 0;
     const bTime = body.bTime ?? 120;
     const chunkNumber = Math.max(1, body.chunkNumber ?? 1);
-    return this.buildChunkReview(video, aTime, bTime, chunkNumber, body.feedback, body.userContext, true, body.songInfo);
+    const apiKey = await this.getUserApiKey(req);
+    return this.buildChunkReview(
+      video,
+      aTime,
+      bTime,
+      chunkNumber,
+      body.feedback,
+      body.userContext,
+      true,
+      body.songInfo,
+      apiKey,
+    );
   }
 
   @Post(':id/chat')
   async chat(
     @Param('id') id: string,
     @Body() body: { message?: string; reviewContext?: string },
+    @Req() req?: Request,
   ) {
     if (!body.message?.trim()) {
       return { error: 'Message is required' };
     }
     try {
       const previousHistory = await this.chatHistoryService.getHistory(id);
-      const result = await this.reviewService.chat(body.message, previousHistory, body.reviewContext);
+      const apiKey = await this.getUserApiKey(req);
+      const result = await this.reviewService.chat(
+        body.message,
+        previousHistory,
+        body.reviewContext,
+        apiKey,
+      );
       await this.chatHistoryService.saveMessage(id, 'user', body.message);
-      await this.chatHistoryService.saveMessage(id, 'assistant', result.reply, result.actions);
+      await this.chatHistoryService.saveMessage(
+        id,
+        'assistant',
+        result.reply,
+        result.actions,
+      );
       return { reply: result.reply, actions: result.actions };
     } catch (error) {
-      return { reply: 'Sorry, there was an error reaching the AI coach. Please try again.', actions: [] };
+      return {
+        reply:
+          'Sorry, there was an error reaching the AI coach. Please try again.',
+        actions: [],
+      };
     }
   }
 
@@ -129,13 +183,25 @@ export class VideosController {
     @Param('chunkNumber') chunkNumberStr?: string,
     @Query('userContext') userContext?: string,
     @Query('songInfo') songInfo?: string,
+    @Req() req?: Request,
   ) {
     const video = await this.videoRepository.getById(id);
     if (!video) return { error: 'Video not found' };
     const aTime = parseFloat(aTimeStr || '0') || 0;
     const bTime = parseFloat(bTimeStr || '120') || 120;
     const chunkNumber = Math.max(1, parseInt(chunkNumberStr || '1', 10));
-    return this.buildChunkReview(video, aTime, bTime, chunkNumber, undefined, userContext, false, songInfo);
+    const apiKey = await this.getUserApiKey(req);
+    return this.buildChunkReview(
+      video,
+      aTime,
+      bTime,
+      chunkNumber,
+      undefined,
+      userContext,
+      false,
+      songInfo,
+      apiKey,
+    );
   }
 
   @Get(':id/saved-reviews')
@@ -143,48 +209,91 @@ export class VideosController {
     return this.savedReviewService.findAllForVideo(id);
   }
 
-  private async buildChunkReview(video: any, aTime: number, bTime: number, chunkNumber: number, userFeedback?: string, userContext?: string, forceRegenerate = false, songInfo?: string) {
+  private async buildChunkReview(
+    video: any,
+    aTime: number,
+    bTime: number,
+    chunkNumber: number,
+    userFeedback?: string,
+    userContext?: string,
+    forceRegenerate = false,
+    songInfo?: string,
+    apiKey?: string,
+  ) {
     const chunkStart = aTime + (chunkNumber - 1) * this.CHUNK_DURATION_SECONDS;
     const chunkEnd = Math.min(bTime, chunkStart + this.CHUNK_DURATION_SECONDS);
 
-    if (chunkStart >= bTime) return { error: 'No more chunks in this interval' };
+    if (chunkStart >= bTime)
+      return { error: 'No more chunks in this interval' };
 
     const chunkDurationSeconds = chunkEnd - chunkStart;
-    const totalChunks = Math.max(1, Math.ceil((bTime - aTime) / this.CHUNK_DURATION_SECONDS));
+    const totalChunks = Math.max(
+      1,
+      Math.ceil((bTime - aTime) / this.CHUNK_DURATION_SECONDS),
+    );
     const hasNextChunk = chunkNumber < totalChunks;
 
     // Return cached review if not forcing regeneration
     if (!forceRegenerate && !userFeedback) {
-      const saved = await this.savedReviewService.find(video.id, aTime, bTime, chunkNumber);
+      const saved = await this.savedReviewService.find(
+        video.id,
+        aTime,
+        bTime,
+        chunkNumber,
+      );
       if (saved) {
-        return { ...(saved.reviewData as object), cached: true, cachedAt: saved.updatedAt };
+        return {
+          ...saved.reviewData,
+          cached: true,
+          cachedAt: saved.updatedAt,
+        };
       }
     }
 
     try {
-      const cached = await this.savedReviewService.find(video.id, aTime, bTime, chunkNumber);
+      const cached = await this.savedReviewService.find(
+        video.id,
+        aTime,
+        bTime,
+        chunkNumber,
+      );
       const effectiveContext = userContext ?? cached?.userContext ?? undefined;
-      const effectiveSongInfo = songInfo ?? (cached?.reviewData as any)?.songInfo ?? undefined;
-      const review = await Promise.race([
-        this.reviewService.reviewVideo(video.title, {
-          durationSeconds: chunkDurationSeconds,
-          title: video.title,
-          audioBeatCount: this.estimateBeatCount(video),
-          movementScore: this.estimateMovementScore(video),
-          userFeedback,
-          userContext: effectiveContext,
-          songInfo: effectiveSongInfo,
-        }),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('AI analysis timeout')), 45000)
+      const effectiveSongInfo =
+        songInfo ?? (cached?.reviewData as any)?.songInfo ?? undefined;
+      const review = (await Promise.race([
+        this.reviewService.reviewVideo(
+          video.title,
+          {
+            durationSeconds: chunkDurationSeconds,
+            title: video.title,
+            audioBeatCount: this.estimateBeatCount(video),
+            movementScore: this.estimateMovementScore(video),
+            userFeedback,
+            userContext: effectiveContext,
+            songInfo: effectiveSongInfo,
+          },
+          apiKey,
         ),
-      ]) as any;
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('AI analysis timeout')), 45000),
+        ),
+      ])) as any;
 
       let segments = review.segments || [];
       if (!segments.length) {
         segments = [
-          { startTime: chunkStart, endTime: chunkStart + chunkDurationSeconds * 0.5, label: 'First half', reason: 'Pay attention to timing and positioning' },
-          { startTime: chunkStart + chunkDurationSeconds * 0.5, endTime: chunkEnd, label: 'Second half', reason: 'Watch for consistency through the finish' },
+          {
+            startTime: chunkStart,
+            endTime: chunkStart + chunkDurationSeconds * 0.5,
+            label: 'First half',
+            reason: 'Pay attention to timing and positioning',
+          },
+          {
+            startTime: chunkStart + chunkDurationSeconds * 0.5,
+            endTime: chunkEnd,
+            label: 'Second half',
+            reason: 'Watch for consistency through the finish',
+          },
         ];
       } else {
         segments = segments.map((seg: any) => ({
@@ -205,12 +314,21 @@ export class VideosController {
         aTime,
         bTime,
         hasNextChunk,
-        nextChunkLabel: hasNextChunk ? `Next (${this.formatTime(chunkEnd)} – ${this.formatTime(Math.min(bTime, chunkEnd + this.CHUNK_DURATION_SECONDS))})` : 'Review complete',
+        nextChunkLabel: hasNextChunk
+          ? `Next (${this.formatTime(chunkEnd)} – ${this.formatTime(Math.min(bTime, chunkEnd + this.CHUNK_DURATION_SECONDS))})`
+          : 'Review complete',
         prompt: `Chunk ${chunkNumber} of ${totalChunks}${hasNextChunk ? ' — tap Next to continue' : ' — review complete'}`,
         songInfo: effectiveSongInfo,
       };
       // Persist so subsequent requests return instantly
-      await this.savedReviewService.upsert(video.id, aTime, bTime, chunkNumber, result, userContext);
+      await this.savedReviewService.upsert(
+        video.id,
+        aTime,
+        bTime,
+        chunkNumber,
+        result,
+        userContext,
+      );
       return result;
     } catch (error) {
       console.error('Error analyzing chunk:', error);
@@ -224,12 +342,29 @@ export class VideosController {
         bTime,
         hasNextChunk,
         summary: `Section ${this.formatTime(chunkStart)}–${this.formatTime(chunkEnd)}: Review the timing and musicality here.`,
-        musicality: 'Listen carefully to how your steps align with the beat in this section.',
-        style: 'Focus on maintaining your frame and posture throughout this moment.',
-        improvementTips: ['Count the beats clearly in this section', 'Practice this specific moment at 0.75x speed', 'Record another attempt and compare'],
+        musicality:
+          'Listen carefully to how your steps align with the beat in this section.',
+        style:
+          'Focus on maintaining your frame and posture throughout this moment.',
+        improvementTips: [
+          'Count the beats clearly in this section',
+          'Practice this specific moment at 0.75x speed',
+          'Record another attempt and compare',
+        ],
         segments: [
-          { startTime: chunkStart, endTime: chunkStart + chunkDurationSeconds * 0.5, label: 'First half', reason: 'Pay attention to your initial positioning and weight transfer' },
-          { startTime: chunkStart + chunkDurationSeconds * 0.5, endTime: chunkEnd, label: 'Second half', reason: 'Watch for consistency and completion of the movement' },
+          {
+            startTime: chunkStart,
+            endTime: chunkStart + chunkDurationSeconds * 0.5,
+            label: 'First half',
+            reason:
+              'Pay attention to your initial positioning and weight transfer',
+          },
+          {
+            startTime: chunkStart + chunkDurationSeconds * 0.5,
+            endTime: chunkEnd,
+            label: 'Second half',
+            reason: 'Watch for consistency and completion of the movement',
+          },
         ],
         analysisSource: 'fallback',
         prompt: `Chunk ${chunkNumber} of ${totalChunks} (fallback analysis)`,
@@ -249,7 +384,8 @@ export class VideosController {
     return {
       videoId: id,
       videoDuration,
-      prompt: 'Select a section to review. Set A and B times, or use the default starting section.',
+      prompt:
+        'Select a section to review. Set A and B times, or use the default starting section.',
       defaultA: 0,
       defaultB: Math.min(videoDuration, 120),
       readyForChunks: true,
@@ -257,7 +393,11 @@ export class VideosController {
   }
 
   @Get(':id/file')
-  async streamVideo(@Param('id') id: string, @Res() res: Response, @Req() req: Request) {
+  async streamVideo(
+    @Param('id') id: string,
+    @Res() res: Response,
+    @Req() req: Request,
+  ) {
     const video = await this.videoRepository.getById(id);
     if (!video) {
       res.status(404).json({ error: 'Video not found' });
@@ -276,7 +416,9 @@ export class VideosController {
         res.sendFile(filePath);
         return;
       } catch (error) {
-        res.status(416).json({ error: 'Unable to stream the requested video range' });
+        res
+          .status(416)
+          .json({ error: 'Unable to stream the requested video range' });
         return;
       }
     }
@@ -325,7 +467,9 @@ export class VideosController {
         const durationSeconds = parseInt(videoInfo.videoDetails.lengthSeconds);
 
         if (durationSeconds > 600) {
-          return { error: 'Video is longer than 10 minutes. Please trim it first.' };
+          return {
+            error: 'Video is longer than 10 minutes. Please trim it first.',
+          };
         }
 
         const videoId = randomUUID();
@@ -353,15 +497,16 @@ export class VideosController {
               '- Network connection issue',
               '- Video file is too large',
             ],
-            suggestion: 'Please download manually from: https://savefrom.net and upload the file',
+            suggestion:
+              'Please download manually from: https://savefrom.net and upload the file',
           };
         }
 
         // Get file stats
         const fileStats = await stat(filePath);
 
-        // Create video entity
-        const video = new VideoEntity(
+        // Create practice-video.entity
+        const video = new PracticeVideoEntity(
           videoId,
           body.title || videoTitle,
           fileName,
@@ -381,7 +526,8 @@ export class VideosController {
       } else if (isInstagram) {
         // For Instagram, return helpful message
         return {
-          error: 'Instagram video download requires authentication. Please download manually using:',
+          error:
+            'Instagram video download requires authentication. Please download manually using:',
           options: [
             '1. Use: https://download.savefrom.net',
             '2. Or: https://igdownloader.app',
@@ -417,11 +563,16 @@ export class VideosController {
       },
     }),
   )
-  async uploadVideo(@UploadedFile() file: any, @Body() body: { title?: string }) {
+  async uploadVideo(
+    @UploadedFile() file: any,
+    @Body() body: { title?: string },
+    @Req() req?: Request,
+  ) {
+    const apiKey = await this.getUserApiKey(req);
     const title = body.title ?? file?.originalname ?? 'Untitled video';
     const fileName = file.filename ?? file.originalname;
 
-    const video = new VideoEntity(
+    const video = new PracticeVideoEntity(
       randomUUID(),
       title,
       fileName,
@@ -434,16 +585,37 @@ export class VideosController {
     return {
       video,
       message: 'Upload complete. Video is ready to practice.',
-      review: await this.reviewService.reviewVideo(title, {
-        durationSeconds: this.estimateDurationSecondsFromBytes(file.size),
+      review: await this.reviewService.reviewVideo(
         title,
-        audioBeatCount: this.estimateBeatCountFromDuration(this.estimateDurationSecondsFromBytes(file.size)),
-        movementScore: this.estimateMovementScoreFromDuration(this.estimateDurationSecondsFromBytes(file.size)),
-      }),
+        {
+          durationSeconds: this.estimateDurationSecondsFromBytes(file.size),
+          title,
+          audioBeatCount: this.estimateBeatCountFromDuration(
+            this.estimateDurationSecondsFromBytes(file.size),
+          ),
+          movementScore: this.estimateMovementScoreFromDuration(
+            this.estimateDurationSecondsFromBytes(file.size),
+          ),
+        },
+        apiKey,
+      ),
     };
   }
 
-  private estimateDurationSeconds(video: VideoEntity): number {
+  private async getUserApiKey(req?: Request): Promise<string | undefined> {
+    if (!req?.headers.authorization || !this.usersService) {
+      return undefined;
+    }
+
+    const [scheme, token] = req.headers.authorization.split(' ');
+    if (scheme !== 'Bearer' || !token) {
+      return undefined;
+    }
+
+    return this.usersService.getAgentApiKeyForToken(token);
+  }
+
+  private estimateDurationSeconds(video: PracticeVideoEntity): number {
     return this.estimateDurationSecondsFromBytes(video.sizeBytes);
   }
 
@@ -455,7 +627,7 @@ export class VideosController {
     return 600;
   }
 
-  private estimateBeatCount(video: VideoEntity): number {
+  private estimateBeatCount(video: PracticeVideoEntity): number {
     const durationSeconds = this.estimateDurationSeconds(video);
     return this.estimateBeatCountFromDuration(durationSeconds);
   }
@@ -464,7 +636,7 @@ export class VideosController {
     return Math.max(4, Math.round(durationSeconds / 4));
   }
 
-  private estimateMovementScore(video: VideoEntity): number {
+  private estimateMovementScore(video: PracticeVideoEntity): number {
     const beatCount = this.estimateBeatCount(video);
     return this.estimateMovementScoreFromDuration(beatCount);
   }
@@ -489,4 +661,3 @@ export class VideosController {
     return { success: true };
   }
 }
-

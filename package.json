@@ -7,6 +7,10 @@
   "license": "UNLICENSED",
   "scripts": {
     "build": "nest build",
+    "worktrees:status": "bash ./scripts/worktrees-integrate.sh --status",
+    "worktrees:repair": "bash ./scripts/worktrees-integrate.sh --repair",
+    "worktrees:install": "bash ./scripts/worktrees-integrate.sh --exec \"npm install\"",
+    "worktrees:test": "bash ./scripts/worktrees-integrate.sh --exec \"npm test -- --runInBand\"",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
     "start:dev": "nest start --watch",

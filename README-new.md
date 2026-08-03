@@ -17,6 +17,32 @@ This project is a small NestJS API that demonstrates clean architecture and onio
 - src/infrastructure: concrete implementations such as repositories
 - src/presentation: controllers that expose the API
 
+## Worktree architecture
+
+Use this layout so all worktrees remain integrated with the main app:
+
+- bachata-coach/bachata-app (main repository)
+- bachata-coach/bachata-app.worktrees/<branch-worktree> (linked worktrees)
+
+If folders are moved, re-link Git metadata from the main repository:
+
+```bash
+npm run worktrees:repair
+```
+
+Useful multi-worktree commands:
+
+```bash
+# show discovered worktrees and git worktree state
+npm run worktrees:status
+
+# install dependencies in main + every discovered worktree
+npm run worktrees:install
+
+# run tests in main + every discovered worktree
+npm run worktrees:test
+```
+
 ## Run locally
 
 ```bash

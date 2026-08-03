@@ -42,28 +42,67 @@ export type ChatAction =
   | { type: 'mirror' };
 
 @Injectable()
-export class VideoReviewService {
-  private readonly modelApiKey = process.env.OPENAI_API_KEY ?? process.env.OPENAI_KEY;
-  private readonly modelEndpoint = this.normalizeBaseUrl(process.env.OPENAI_BASE_URL ?? process.env.OPENAI_ENDPOINT ?? 'https://api.openai.com/v1');
-  private readonly modelName = process.env.OPENAI_MODEL ?? process.env.OPENAI_CHAT_MODEL ?? 'gpt-4o-mini';
+export class PracticeReviewService {
+  private readonly modelApiKey =
+    process.env.OPENAI_API_KEY ?? process.env.OPENAI_KEY;
+  private readonly modelEndpoint = this.normalizeBaseUrl(
+    process.env.OPENAI_BASE_URL ??
+      process.env.OPENAI_ENDPOINT ??
+      'https://api.openai.com/v1',
+  );
+  private readonly modelName =
+    process.env.OPENAI_MODEL ?? process.env.OPENAI_CHAT_MODEL ?? 'gpt-4o-mini';
 
-  async reviewVideo(title: string, context: ReviewContext = {}): Promise<VideoReviewResult> {
+  async reviewVideo(
+    title: string,
+    context: ReviewContext = {},
+    apiKey?: string,
+  ): Promise<VideoReviewResult> {
     const durationSeconds = context.durationSeconds ?? 24;
-    const audioBeatCount = context.audioBeatCount ?? this.estimateBeatCount(durationSeconds);
-    const movementScore = context.movementScore ?? this.estimateMovementScore(audioBeatCount);
+    const audioBeatCount =
+      context.audioBeatCount ?? this.estimateBeatCount(durationSeconds);
+    const movementScore =
+      context.movementScore ?? this.estimateMovementScore(audioBeatCount);
+    const effectiveApiKey = apiKey ?? this.modelApiKey;
 
-    if (this.modelApiKey) {
+    if (effectiveApiKey) {
       try {
-        return await this.reviewWithAi(title, durationSeconds, audioBeatCount, movementScore, context.userFeedback, context.userContext, context.songInfo);
+        return await this.reviewWithAi(
+          title,
+          durationSeconds,
+          audioBeatCount,
+          movementScore,
+          context.userFeedback,
+          context.userContext,
+          context.songInfo,
+          effectiveApiKey,
+        );
       } catch (error) {
-        console.warn('AI review unavailable, falling back to heuristic analysis.', error);
+        console.warn(
+          'AI review unavailable, falling back to heuristic analysis.',
+          error,
+        );
       }
     }
 
-    return this.reviewWithHeuristics(title, durationSeconds, audioBeatCount, movementScore);
+    return this.reviewWithHeuristics(
+      title,
+      durationSeconds,
+      audioBeatCount,
+      movementScore,
+    );
   }
 
-  private async reviewWithAi(title: string, durationSeconds: number, audioBeatCount: number, movementScore: number, userFeedback?: string, userContext?: string, songInfo?: string): Promise<VideoReviewResult> {
+  private async reviewWithAi(
+    title: string,
+    durationSeconds: number,
+    audioBeatCount: number,
+    movementScore: number,
+    userFeedback?: string,
+    userContext?: string,
+    songInfo?: string,
+    apiKey?: string,
+  ): Promise<VideoReviewResult> {
     const feedbackSection = userFeedback?.trim()
       ? `\n\nIMPORTANT \u2014 DANCER CORRECTION: The dancer provided this feedback on the previous analysis:\n"${userFeedback}"\nAdjust your observations specifically to address this correction.`
       : '';
@@ -107,14 +146,18 @@ Focus ONLY on rhythm, timing, and musicality. Ignore everything else.${songSecti
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.modelApiKey}`,
+        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
         model: this.modelName,
         temperature: 0.3,
         response_format: { type: 'json_object' },
         messages: [
-          { role: 'system', content: 'You are a bachata rhythm and musicality coach. Focus ONLY on timing, rhythm, beat accuracy, and musical interpretation. Return valid JSON only.' },
+          {
+            role: 'system',
+            content:
+              'You are a bachata rhythm and musicality coach. Focus ONLY on timing, rhythm, beat accuracy, and musical interpretation. Return valid JSON only.',
+          },
           { role: 'user', content: prompt },
         ],
       }),
@@ -128,49 +171,96 @@ Focus ONLY on rhythm, timing, and musicality. Ignore everything else.${songSecti
     const content = payload.choices?.[0]?.message?.content ?? '{}';
     const parsed = this.parseJsonSafe(content);
 
-    const summary = this.toText(parsed.summary, `Timing and rhythm assessment for this section.`);
-    const musicality = this.toText(parsed.musicality, 'Stay connected to the beat and respond to musical accents.');
-    const style = this.toText(parsed.style, 'Maintain consistent rhythm throughout.');
+    const summary = this.toText(
+      parsed.summary,
+      `Timing and rhythm assessment for this section.`,
+    );
+    const musicality = this.toText(
+      parsed.musicality,
+      'Stay connected to the beat and respond to musical accents.',
+    );
+    const style = this.toText(
+      parsed.style,
+      'Maintain consistent rhythm throughout.',
+    );
 
     return {
       summary,
       musicality,
       style,
-      improvementTips: Array.isArray(parsed.improvementTips) ? parsed.improvementTips.filter((tip): tip is string => typeof tip === 'string') : [
-        'Listen for the downbeat and align your steps.',
-        'Practice counting: 1-2-3 pause 5-6-7 pause.',
-        'Record and playback to hear timing differences.',
-      ],
-      segments: this.normalizeSegments(parsed.segments, durationSeconds, audioBeatCount),
+      improvementTips: Array.isArray(parsed.improvementTips)
+        ? parsed.improvementTips.filter(
+            (tip): tip is string => typeof tip === 'string',
+          )
+        : [
+            'Listen for the downbeat and align your steps.',
+            'Practice counting: 1-2-3 pause 5-6-7 pause.',
+            'Record and playback to hear timing differences.',
+          ],
+      segments: this.normalizeSegments(
+        parsed.segments,
+        durationSeconds,
+        audioBeatCount,
+      ),
       analysisSource: 'ai',
     };
   }
 
-  private reviewWithHeuristics(title: string, durationSeconds: number, audioBeatCount: number, movementScore: number): VideoReviewResult {
-    const segmentSize = Math.max(4, Math.floor(durationSeconds / Math.max(2, Math.min(6, Math.round(audioBeatCount / 2)))));
-    const segments = Array.from({ length: Math.max(2, Math.ceil(durationSeconds / segmentSize)) }, (_, index) => {
-      const startTime = index * segmentSize;
-      const endTime = Math.min(durationSeconds, startTime + segmentSize);
+  private reviewWithHeuristics(
+    title: string,
+    durationSeconds: number,
+    audioBeatCount: number,
+    movementScore: number,
+  ): VideoReviewResult {
+    const segmentSize = Math.max(
+      4,
+      Math.floor(
+        durationSeconds /
+          Math.max(2, Math.min(6, Math.round(audioBeatCount / 2))),
+      ),
+    );
+    const segments = Array.from(
+      { length: Math.max(2, Math.ceil(durationSeconds / segmentSize)) },
+      (_, index) => {
+        const startTime = index * segmentSize;
+        const endTime = Math.min(durationSeconds, startTime + segmentSize);
 
-      // Identify song section
-      const sectionIndex = Math.floor((startTime / durationSeconds) * 3);
-      const sections = ['Derecho (intro)', 'Majao (syncopated)', 'Mambo (percussion)'];
-      const section = sections[Math.min(sectionIndex, 2)];
+        // Identify song section
+        const sectionIndex = Math.floor((startTime / durationSeconds) * 3);
+        const sections = [
+          'Derecho (intro)',
+          'Majao (syncopated)',
+          'Mambo (percussion)',
+        ];
+        const section = sections[Math.min(sectionIndex, 2)];
 
-      // Timing assessment based on movement score
-      const timingQuality = movementScore >= 8 ? 'precise' : movementScore >= 5 ? 'moderate' : 'needs work';
-      const rhythmFocus = section.includes('syncopated') ? 'syncopated accents' : section.includes('percussion') ? 'percussion hits' : 'basic beat';
+        // Timing assessment based on movement score
+        const timingQuality =
+          movementScore >= 8
+            ? 'precise'
+            : movementScore >= 5
+              ? 'moderate'
+              : 'needs work';
+        const rhythmFocus = section.includes('syncopated')
+          ? 'syncopated accents'
+          : section.includes('percussion')
+            ? 'percussion hits'
+            : 'basic beat';
 
-      const label = section;
-      const reason = `${section}: Timing is ${timingQuality}. Focus on hitting ${rhythmFocus} clearly.`;
+        const label = section;
+        const reason = `${section}: Timing is ${timingQuality}. Focus on hitting ${rhythmFocus} clearly.`;
 
-      return { startTime, endTime, label, reason };
-    });
+        return { startTime, endTime, label, reason };
+      },
+    );
 
     return {
       summary: `Timing and rhythm analysis: You're dancing through the ${['Derecho', 'Majao', 'Mambo'][Math.floor(durationSeconds / 3)]} section. Focus on beat accuracy.`,
       musicality: `Listen to the ${audioBeatCount} main beats in this section. Align your steps to emphasize count 1 and count 5.`,
-      style: movementScore >= 7 ? 'Your rhythm timing is strong - maintain this clarity.' : 'Work on hitting the main beats more precisely before adding syncopation.',
+      style:
+        movementScore >= 7
+          ? 'Your rhythm timing is strong - maintain this clarity.'
+          : 'Work on hitting the main beats more precisely before adding syncopation.',
       improvementTips: [
         'Count aloud: "1-2-3 pause 5-6-7 pause" to internalize the basic pattern',
         'Listen for the clave rhythm pattern in the music',
@@ -181,18 +271,36 @@ Focus ONLY on rhythm, timing, and musicality. Ignore everything else.${songSecti
     };
   }
 
-  private normalizeSegments(segments: unknown, durationSeconds: number, audioBeatCount: number): ReviewSegment[] {
+  private normalizeSegments(
+    segments: unknown,
+    durationSeconds: number,
+    audioBeatCount: number,
+  ): ReviewSegment[] {
     if (!Array.isArray(segments)) {
-      return this.reviewWithHeuristics('clip', durationSeconds, this.estimateBeatCount(durationSeconds), this.estimateMovementScore(durationSeconds)).segments;
+      return this.reviewWithHeuristics(
+        'clip',
+        durationSeconds,
+        this.estimateBeatCount(durationSeconds),
+        this.estimateMovementScore(durationSeconds),
+      ).segments;
     }
 
     return segments
-      .filter((segment): segment is Record<string, unknown> => typeof segment === 'object' && segment !== null)
+      .filter(
+        (segment): segment is Record<string, unknown> =>
+          typeof segment === 'object' && segment !== null,
+      )
       .map((segment) => ({
         startTime: this.toNumber(segment.startTime, 0),
         endTime: this.toNumber(segment.endTime, durationSeconds),
-        label: typeof segment.label === 'string' ? segment.label : `Beat ${Math.min(audioBeatCount, 1)}`,
-        reason: typeof segment.reason === 'string' ? segment.reason : 'Review the movement against the beat.',
+        label:
+          typeof segment.label === 'string'
+            ? segment.label
+            : `Beat ${Math.min(audioBeatCount, 1)}`,
+        reason:
+          typeof segment.reason === 'string'
+            ? segment.reason
+            : 'Review the movement against the beat.',
       }))
       .filter((segment) => segment.endTime > segment.startTime)
       .slice(0, 8);
@@ -222,7 +330,10 @@ Focus ONLY on rhythm, timing, and musicality. Ignore everything else.${songSecti
   }
 
   private estimateMovementScore(durationSeconds: number): number {
-    return Math.min(10, Math.max(3, Math.round(this.estimateBeatCount(durationSeconds) / 2 + 2)));
+    return Math.min(
+      10,
+      Math.max(3, Math.round(this.estimateBeatCount(durationSeconds) / 2 + 2)),
+    );
   }
 
   private parseJsonSafe(content: string): Record<string, unknown> {
@@ -233,7 +344,10 @@ Focus ONLY on rhythm, timing, and musicality. Ignore everything else.${songSecti
       const lastBrace = content.lastIndexOf('}');
       if (firstBrace >= 0 && lastBrace > firstBrace) {
         try {
-          return JSON.parse(content.slice(firstBrace, lastBrace + 1)) as Record<string, unknown>;
+          return JSON.parse(content.slice(firstBrace, lastBrace + 1)) as Record<
+            string,
+            unknown
+          >;
         } catch {
           return {};
         }
@@ -250,9 +364,15 @@ Focus ONLY on rhythm, timing, and musicality. Ignore everything else.${songSecti
     message: string,
     history: ChatMessage[],
     reviewContext?: string,
+    apiKey?: string,
   ): Promise<{ reply: string; actions: ChatAction[] }> {
-    if (!this.modelApiKey) {
-      return { reply: 'AI coach is unavailable (no OPENAI_API_KEY). Set it in .env to enable chat.', actions: [] };
+    const effectiveApiKey = apiKey ?? this.modelApiKey;
+    if (!effectiveApiKey) {
+      return {
+        reply:
+          'AI coach is unavailable (no OPENAI_API_KEY). Set it in .env to enable chat.',
+        actions: [],
+      };
     }
 
     const systemContent = `You are a bachata musicality and rhythm coach with direct control over the video player.
@@ -278,7 +398,7 @@ Focus on rhythm, timing, energy, and musicality. Be encouraging and specific.${r
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${this.modelApiKey}`,
+        Authorization: `Bearer ${effectiveApiKey}`,
       },
       body: JSON.stringify({
         model: this.modelName,
@@ -296,16 +416,25 @@ Focus on rhythm, timing, energy, and musicality. Be encouraging and specific.${r
       throw new Error(`AI chat request failed: ${response.status}`);
     }
 
-    const payload = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
+    const payload = (await response.json()) as {
+      choices?: Array<{ message?: { content?: string } }>;
+    };
     const raw = payload.choices?.[0]?.message?.content ?? '{}';
-    const parsed = this.parseJsonSafe(raw) as { reply?: unknown; actions?: unknown };
+    const parsed = this.parseJsonSafe(raw) as {
+      reply?: unknown;
+      actions?: unknown;
+    };
 
     return {
-      reply: typeof parsed.reply === 'string' && parsed.reply.trim() ? parsed.reply : 'Sorry, I could not generate a response.',
+      reply:
+        typeof parsed.reply === 'string' && parsed.reply.trim()
+          ? parsed.reply
+          : 'Sorry, I could not generate a response.',
       actions: Array.isArray(parsed.actions)
-        ? (parsed.actions as ChatAction[]).filter((a) => a && typeof (a as any).type === 'string')
+        ? (parsed.actions as ChatAction[]).filter(
+            (a) => a && typeof (a as any).type === 'string',
+          )
         : [],
     };
   }
 }
-

@@ -1,4 +1,12 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+  ManyToOne,
+  JoinColumn,
+} from 'typeorm';
 import { ReviewEntity } from './review.entity';
 
 @Entity('coach_plans')
@@ -9,7 +17,9 @@ export class CoachPlanEntity {
   @Column()
   reviewId: string;
 
-  @ManyToOne(() => ReviewEntity, (review) => review.coachPlans, { onDelete: 'CASCADE' })
+  @ManyToOne(() => ReviewEntity, (review) => review.coachPlans, {
+    onDelete: 'CASCADE',
+  })
   @JoinColumn({ name: 'reviewId' })
   review: ReviewEntity;
 

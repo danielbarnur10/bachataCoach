@@ -1,7 +1,21 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 
-export type ProcessingJobType = 'video_prepare' | 'chunk_analyze' | 'feedback_generate' | 'coach_plan_generate';
-export type ProcessingJobStatus = 'pending' | 'processing' | 'completed' | 'failed';
+export type ProcessingJobType =
+  | 'video_prepare'
+  | 'chunk_analyze'
+  | 'feedback_generate'
+  | 'coach_plan_generate';
+export type ProcessingJobStatus =
+  | 'pending'
+  | 'processing'
+  | 'completed'
+  | 'failed';
 
 @Entity('processing_jobs')
 export class ProcessingJobEntity {

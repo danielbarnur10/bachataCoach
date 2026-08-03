@@ -1,9 +1,36 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+  ManyToOne,
+  JoinColumn,
+} from 'typeorm';
 import { ReviewChunkEntity } from './review-chunk.entity';
 
-export type FeedbackCategory = 'timing' | 'footwork' | 'posture' | 'partnership' | 'musicality' | 'strength' | 'recommendation';
-export type FeedbackSeverity = 'critical' | 'high' | 'medium' | 'low' | 'informational';
-export type UserQualityRating = 'helpful' | 'not_helpful' | 'incorrect_timing' | 'cannot_see' | 'too_vague' | 'too_advanced' | 'too_basic';
+export type FeedbackCategory =
+  | 'timing'
+  | 'footwork'
+  | 'posture'
+  | 'partnership'
+  | 'musicality'
+  | 'strength'
+  | 'recommendation';
+export type FeedbackSeverity =
+  | 'critical'
+  | 'high'
+  | 'medium'
+  | 'low'
+  | 'informational';
+export type UserQualityRating =
+  | 'helpful'
+  | 'not_helpful'
+  | 'incorrect_timing'
+  | 'cannot_see'
+  | 'too_vague'
+  | 'too_advanced'
+  | 'too_basic';
 
 @Entity('feedback_items')
 export class FeedbackItemEntity {
@@ -13,7 +40,9 @@ export class FeedbackItemEntity {
   @Column()
   chunkId: string;
 
-  @ManyToOne(() => ReviewChunkEntity, (chunk) => chunk.feedbackItems, { onDelete: 'CASCADE' })
+  @ManyToOne(() => ReviewChunkEntity, (chunk) => chunk.feedbackItems, {
+    onDelete: 'CASCADE',
+  })
   @JoinColumn({ name: 'chunkId' })
   chunk: ReviewChunkEntity;
 

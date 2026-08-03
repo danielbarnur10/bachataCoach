@@ -1,4 +1,12 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  CreateDateColumn,
+  UpdateDateColumn,
+  ManyToOne,
+  JoinColumn,
+} from 'typeorm';
 import { VideoEntity } from './video.entity';
 import { UserEntity } from './user.entity';
 
@@ -10,7 +18,9 @@ export class SavedLoopEntity {
   @Column()
   videoId: string;
 
-  @ManyToOne(() => VideoEntity, (video) => video.savedLoops, { onDelete: 'CASCADE' })
+  @ManyToOne(() => VideoEntity, (video) => video.savedLoops, {
+    onDelete: 'CASCADE',
+  })
   @JoinColumn({ name: 'videoId' })
   video: VideoEntity;
 

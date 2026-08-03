@@ -35,6 +35,8 @@ describe('GetLessonByIdUseCase', () => {
 
     const useCase = new GetLessonByIdUseCase(repository);
 
-    await expect(useCase.execute('missing-id')).rejects.toThrow(NotFoundException);
+    await expect(useCase.execute('missing-id')).rejects.toThrow(
+      NotFoundException,
+    );
   });
 });
