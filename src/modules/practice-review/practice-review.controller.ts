@@ -277,6 +277,52 @@ export class PracticeReviewController {
     return this.savedReviewService.findAllForVideo(id);
   }
 
+  @Delete(':id/saved-reviews')
+  async deleteSavedReviews(
+    @Param('id') id: string,
+    @Query('aTime') aTimeStr?: string,
+    @Query('bTime') bTimeStr?: string,
+    @Query('chunkNumber') chunkNumberStr?: string,
+    @Req() req?: Request,
+  ) {
+    const requestId = this.getRequestId(req);
+    await this.requireOwnedVideo(id, req);
+
+    const aTime = parseFloat(aTimeStr ?? '');
+    const bTime = parseFloat(bTimeStr ?? '');
+    if (!Number.isFinite(aTime) || !Number.isFinite(bTime) || bTime <= aTime) {
+      throw new BadRequestException(
+        'aTime and bTime are required and bTime must be greater than aTime.',
+      );
+    }
+
+    const parsedChunkNumber = chunkNumberStr
+      ? parseInt(chunkNumberStr, 10)
+      : undefined;
+    if (
+      parsedChunkNumber !== undefined &&
+      (!Number.isInteger(parsedChunkNumber) || parsedChunkNumber < 1)
+    ) {
+      throw new BadRequestException('chunkNumber must be a positive integer.');
+    }
+
+    const deletedCount =
+      parsedChunkNumber !== undefined
+        ? await this.savedReviewService.deleteChunk(
+            id,
+            aTime,
+            bTime,
+            parsedChunkNumber,
+          )
+        : await this.savedReviewService.deleteRange(id, aTime, bTime);
+
+    this.logger.log(
+      `saved review delete (videoId=${id}, range=${aTime}-${bTime}, chunk=${parsedChunkNumber ?? 'all'}, deleted=${deletedCount}, requestId=${requestId})`,
+    );
+
+    return { success: true, deletedCount };
+  }
+
   private async buildChunkReview(
     video: any,
     aTime: number,

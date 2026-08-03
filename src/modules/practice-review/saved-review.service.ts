@@ -53,4 +53,28 @@ export class SavedReviewService {
       );
     }
   }
+
+  async deleteChunk(
+    videoId: string,
+    aTime: number,
+    bTime: number,
+    chunkNumber: number,
+  ): Promise<number> {
+    const result = await this.repo.delete({
+      videoId,
+      aTime,
+      bTime,
+      chunkNumber,
+    });
+    return result.affected ?? 0;
+  }
+
+  async deleteRange(
+    videoId: string,
+    aTime: number,
+    bTime: number,
+  ): Promise<number> {
+    const result = await this.repo.delete({ videoId, aTime, bTime });
+    return result.affected ?? 0;
+  }
 }

@@ -1041,13 +1041,77 @@
         }
       }
 
+      function buildSavedReviewDeleteQuery(aTime, bTime, chunkNumber) {
+        const params = new URLSearchParams({
+          aTime: String(aTime),
+          bTime: String(bTime),
+        });
+        if (typeof chunkNumber === 'number') {
+          params.set('chunkNumber', String(chunkNumber));
+        }
+        return params.toString();
+      }
+
+      async function deleteSavedReview(videoId, aTime, bTime, chunkNumber) {
+        if (!state.currentUser) {
+          document.getElementById('uploadStatus').textContent = 'Sign in before deleting saved reviews.';
+          openAuthDialog();
+          return;
+        }
+
+        const scopeLabel = typeof chunkNumber === 'number'
+          ? `chunk ${chunkNumber}`
+          : `${formatTime(aTime)}-${formatTime(bTime)} session`;
+        if (!window.confirm(`Delete saved review for ${scopeLabel}?`)) {
+          return;
+        }
+
+        try {
+          const query = buildSavedReviewDeleteQuery(aTime, bTime, chunkNumber);
+          const response = await authorizedFetch(`/videos/${videoId}/saved-reviews?${query}`, {
+            method: 'DELETE',
+          });
+          const payload = await parseApiResponse(response);
+          const deletedCount = payload.deletedCount || 0;
+
+          state.savedReviews = (state.savedReviews || []).filter((review) => {
+            const sameRange = review.aTime === aTime && review.bTime === bTime;
+            if (!sameRange) return true;
+            if (typeof chunkNumber === 'number') {
+              return review.chunkNumber !== chunkNumber;
+            }
+            return false;
+          });
+
+          if (
+            state.reviewState &&
+            state.reviewState.videoId === videoId &&
+            state.reviewState.aTime === aTime &&
+            state.reviewState.bTime === bTime &&
+            (typeof chunkNumber !== 'number' || state.currentChunk === chunkNumber)
+          ) {
+            state.reviewState = null;
+            state.currentChunk = 1;
+            const reviewPanel = document.getElementById('reviewPanel');
+            if (reviewPanel) {
+              reviewPanel.innerHTML = '<p class="muted">Saved review deleted. Start a new AI review for this section.</p>';
+            }
+          }
+
+          renderSavedReviews(videoId);
+          document.getElementById('uploadStatus').textContent = `Deleted ${deletedCount} saved review item(s).`;
+        } catch (error) {
+          document.getElementById('uploadStatus').textContent =
+            error.message || 'Unable to delete the saved review.';
+        }
+      }
+
       function renderSavedReviews(videoId) {
         const reviewPanel = document.getElementById('reviewPanel');
         if (!reviewPanel) return;
         const reviews = state.savedReviews || [];
         if (!reviews.length) return;
 
-        // Group chunks by session (aTime + bTime pair)
         const sessions = {};
         reviews.forEach((r) => {
           const key = `${r.aTime}-${r.bTime}`;
@@ -1061,14 +1125,22 @@
         const html = sessionList.map((s) => {
           const chunkBtns = s.chunks
             .sort((a, b) => a.chunkNumber - b.chunkNumber)
-            .map((c) => `<button onclick="loadSavedChunk('${videoId}',${c.chunkNumber},${s.aTime},${s.bTime})" style="padding:4px 10px;font-size:0.85rem;border-radius:8px;">Chunk ${c.chunkNumber}</button>`)
+            .map((c) => `
+              <div style="display:flex;gap:6px;align-items:center;">
+                <button onclick="loadSavedChunk('${videoId}',${c.chunkNumber},${s.aTime},${s.bTime})" style="padding:4px 10px;font-size:0.85rem;border-radius:8px;">Chunk ${c.chunkNumber}</button>
+                <button class="danger" onclick="deleteSavedReview('${videoId}',${s.aTime},${s.bTime},${c.chunkNumber})" style="padding:4px 10px;font-size:0.8rem;border-radius:8px;">Delete</button>
+              </div>
+            `)
             .join('');
           const date = new Date(s.updatedAt).toLocaleDateString(undefined, { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
           return `
             <div style="padding:12px;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:12px;margin-bottom:8px;">
               <div class="row" style="margin-bottom:8px;">
                 <strong>${formatTime(s.aTime)} \u2013 ${formatTime(s.bTime)}</strong>
-                <span class="small muted">${date}</span>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
+                  <span class="small muted">${date}</span>
+                  <button class="danger" onclick="deleteSavedReview('${videoId}',${s.aTime},${s.bTime})" style="padding:4px 10px;font-size:0.8rem;border-radius:8px;">Delete session</button>
+                </div>
               </div>
               <div style="display:flex;gap:6px;flex-wrap:wrap;">${chunkBtns}</div>
             </div>`;

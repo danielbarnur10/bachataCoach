@@ -57,6 +57,8 @@ function makeController(
     find: jest.fn().mockResolvedValue(null),
     findAllForVideo: jest.fn().mockResolvedValue([]),
     upsert: jest.fn().mockResolvedValue(undefined),
+    deleteChunk: jest.fn().mockResolvedValue(0),
+    deleteRange: jest.fn().mockResolvedValue(0),
   };
   const usersService = {
     findByToken: jest.fn().mockResolvedValue(null),
@@ -343,6 +345,66 @@ describe('PracticeReviewController.regenerateReview', () => {
       aTime: expect.any(Number),
       bTime: expect.any(Number),
     });
+  });
+});
+
+describe('PracticeReviewController.deleteSavedReviews', () => {
+  it('deletes all chunks for a selected saved-review range', async () => {
+    const { controller, savedReviewService } = makeController(
+      { getOwnedById: jest.fn().mockResolvedValue(makeVideo()) },
+      {},
+      { findByToken: jest.fn().mockResolvedValue({ id: 'owner-1' }) },
+    );
+    savedReviewService.deleteRange.mockResolvedValue(2);
+
+    const result = await controller.deleteSavedReviews(
+      'v1',
+      '0',
+      '30',
+      undefined,
+      { headers: { authorization: 'Bearer token' } } as any,
+    );
+
+    expect(savedReviewService.deleteRange).toHaveBeenCalledWith('v1', 0, 30);
+    expect(result).toEqual({ success: true, deletedCount: 2 });
+  });
+
+  it('deletes only one chunk when chunkNumber is provided', async () => {
+    const { controller, savedReviewService } = makeController(
+      { getOwnedById: jest.fn().mockResolvedValue(makeVideo()) },
+      {},
+      { findByToken: jest.fn().mockResolvedValue({ id: 'owner-1' }) },
+    );
+    savedReviewService.deleteChunk.mockResolvedValue(1);
+
+    const result = await controller.deleteSavedReviews(
+      'v1',
+      '0',
+      '30',
+      '2',
+      { headers: { authorization: 'Bearer token' } } as any,
+    );
+
+    expect(savedReviewService.deleteChunk).toHaveBeenCalledWith('v1', 0, 30, 2);
+    expect(result).toEqual({ success: true, deletedCount: 1 });
+  });
+
+  it('rejects invalid ranges', async () => {
+    const { controller } = makeController(
+      { getOwnedById: jest.fn().mockResolvedValue(makeVideo()) },
+      {},
+      { findByToken: jest.fn().mockResolvedValue({ id: 'owner-1' }) },
+    );
+
+    await expect(
+      controller.deleteSavedReviews(
+        'v1',
+        '30',
+        '10',
+        undefined,
+        { headers: { authorization: 'Bearer token' } } as any,
+      ),
+    ).rejects.toThrow('aTime and bTime are required');
   });
 });
 
