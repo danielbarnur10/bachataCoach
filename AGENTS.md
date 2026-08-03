@@ -27,7 +27,7 @@ NestJS 11 application for uploading bachata practice videos and generating AI-as
 ## Runtime And Data
 
 - Copy `.env.example` to `.env`; never commit credentials from `.env`.
-- `DATABASE_TYPE=sqljs` is the zero-setup local default. PostgreSQL is opt-in with `DATABASE_TYPE=postgres` and the `DATABASE_*` variables.
+- `.env.example` configures PostgreSQL for persistent local development. Use `DATABASE_TYPE=sqljs` only for an ephemeral zero-setup database.
 - sqljs always synchronizes its in-memory schema; PostgreSQL synchronizes only outside production. The project does not yet use migrations, so treat entity changes as schema changes and test startup.
 - The browser app is plain HTML/CSS/JavaScript in `src/public/index.html`; Nest copies it into `dist/public` during builds.
 
