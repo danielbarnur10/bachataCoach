@@ -25,7 +25,7 @@ export class SavedReviewEntity {
   @Column('int')
   chunkNumber: number;
 
-  @Column({ type: 'jsonb' })
+  @Column({ type: 'simple-json' })
   reviewData: object;
 
   // Free-text context the user gave before requesting this review

@@ -53,7 +53,7 @@ export class ReviewEntity {
   @Column({ nullable: true })
   targetDancerRole: 'leader' | 'follower' | 'both' | 'switch';
 
-  @Column({ type: 'simple-array', default: [] })
+  @Column({ type: 'simple-json', default: '[]' })
   requestedCategories: string[];
 
   @Column({ default: 'processing' })
@@ -83,7 +83,7 @@ export class ReviewEntity {
   @Column({ nullable: true })
   failureTimestamp: Date;
 
-  @Column({ type: 'json', default: {} })
+  @Column({ type: 'simple-json', default: '{}' })
   metadata: Record<string, any>;
 
   @UpdateDateColumn()

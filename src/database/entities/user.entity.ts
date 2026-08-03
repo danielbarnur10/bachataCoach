@@ -14,13 +14,13 @@ export class UserEntity {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  @Column({ unique: true })
+  @Column({ type: 'varchar', unique: true })
   email!: string;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   passwordHash!: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   displayName!: string | null;
 
   @Column({ default: 'beginner' })
@@ -32,19 +32,26 @@ export class UserEntity {
   @Column({ default: 'en' })
   preferredLanguage!: string;
 
-  @Column({ type: 'json', default: {} })
+  @Column({ type: 'simple-json', default: '{}' })
   notificationSettings!: Record<string, boolean>;
 
-  @Column({ type: 'json', default: { private: true } })
+  @Column({ type: 'simple-json', default: '{"private":true}' })
   privacySettings!: Record<string, any>;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   agentApiKey!: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   authTokenHash!: string | null;
 
-  @Column({ type: 'timestamptz', nullable: true })
+  @Column({
+    type: 'varchar',
+    nullable: true,
+    transformer: {
+      to: (value: Date | null) => value?.toISOString() ?? null,
+      from: (value: string | null) => (value ? new Date(value) : null),
+    },
+  })
   authTokenExpiresAt!: Date | null;
 
   @CreateDateColumn()

@@ -70,7 +70,7 @@ export class FeedbackItemEntity {
   @Column('text', { nullable: true })
   recommendation: string;
 
-  @Column({ type: 'json', default: {} })
+  @Column({ type: 'simple-json', default: '{}' })
   evidence: Record<string, any>;
 
   @Column('decimal', { precision: 3, scale: 2 })

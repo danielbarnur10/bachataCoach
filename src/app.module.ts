@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { GetLessonByIdUseCase } from './application/use-cases/get-lesson-by-id.use-case';
@@ -34,34 +35,55 @@ import {
       envFilePath: '.env',
       ignoreEnvFile: process.env.NODE_ENV === 'production',
     }),
-    TypeOrmModule.forRoot({
-      type: 'postgres',
-      host: process.env.DATABASE_HOST || 'localhost',
-      port: parseInt(process.env.DATABASE_PORT || '5432', 10),
-      username: process.env.DATABASE_USER || 'postgres',
-      password: process.env.DATABASE_PASSWORD || '',
-      database: process.env.DATABASE_NAME || 'bachata_coach',
-      entities: [
-        UserEntity,
-        VideoEntity,
-        ReviewEntity,
-        ReviewChunkEntity,
-        FeedbackItemEntity,
-        SavedLoopEntity,
-        CoachPlanEntity,
-        ProcessingJobEntity,
-        ChatMessageEntity,
-        SavedReviewEntity,
-      ],
-      synchronize: process.env.NODE_ENV !== 'production',
-      logging: process.env.NODE_ENV === 'development',
-      dropSchema: false,
-      retryAttempts: 3,
-      retryDelay: 1000,
-      ssl:
-        process.env.NODE_ENV === 'production'
-          ? { rejectUnauthorized: false }
-          : false,
+    TypeOrmModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService): TypeOrmModuleOptions => {
+        const entities = [
+          UserEntity,
+          VideoEntity,
+          ReviewEntity,
+          ReviewChunkEntity,
+          FeedbackItemEntity,
+          SavedLoopEntity,
+          CoachPlanEntity,
+          ProcessingJobEntity,
+          ChatMessageEntity,
+          SavedReviewEntity,
+        ];
+
+        const databaseType =
+          (config.get<string>('DATABASE_TYPE') || 'sqljs').toLowerCase();
+
+        if (databaseType === 'postgres') {
+          return {
+            type: 'postgres',
+            host: config.get<string>('DATABASE_HOST', 'localhost'),
+            port: parseInt(config.get<string>('DATABASE_PORT', '5432'), 10),
+            username: config.get<string>('DATABASE_USER', 'postgres'),
+            password: config.get<string>('DATABASE_PASSWORD', ''),
+            database: config.get<string>('DATABASE_NAME', 'bachata_coach'),
+            entities,
+            synchronize: config.get<string>('NODE_ENV') !== 'production',
+            logging: config.get<string>('NODE_ENV') === 'development',
+            dropSchema: false,
+            retryAttempts: 3,
+            retryDelay: 1000,
+            ssl:
+              config.get<string>('NODE_ENV') === 'production'
+                ? { rejectUnauthorized: false }
+                : false,
+          };
+        }
+
+        return {
+          type: 'sqljs',
+          autoSave: false,
+          entities,
+          synchronize: true,
+          logging: config.get<string>('NODE_ENV') === 'development',
+          dropSchema: false,
+        };
+      },
     }),
     TypeOrmModule.forFeature([
       ChatMessageEntity,

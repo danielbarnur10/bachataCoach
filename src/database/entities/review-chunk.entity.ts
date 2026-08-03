@@ -47,10 +47,10 @@ export class ReviewChunkEntity {
   @Column({ default: 0 })
   attemptCount: number;
 
-  @Column({ type: 'json', default: {} })
+  @Column({ type: 'simple-json', default: '{}' })
   measurements: Record<string, any>;
 
-  @Column({ type: 'json', default: {} })
+  @Column({ type: 'simple-json', default: '{}' })
   generatedFeedback: Record<string, any>;
 
   @Column('decimal', { precision: 3, scale: 2, default: 0 })

@@ -29,10 +29,10 @@ export class CoachPlanEntity {
   @Column('text', { nullable: true })
   priorityImprovement: string;
 
-  @Column({ type: 'simple-array', default: [] })
+  @Column({ type: 'simple-json', default: '[]' })
   strengths: string[];
 
-  @Column({ type: 'json', default: [] })
+  @Column({ type: 'simple-json', default: '[]' })
   recommendedDrills: Array<{
     title: string;
     description: string;
@@ -40,7 +40,7 @@ export class CoachPlanEntity {
     loopSpeed: number;
   }>;
 
-  @Column({ type: 'json', default: [] })
+  @Column({ type: 'simple-json', default: '[]' })
   supportingTimestamps: number[];
 
   @Column('text', { nullable: true })
@@ -49,7 +49,7 @@ export class CoachPlanEntity {
   @Column('text', { nullable: true })
   nextFocusArea: string;
 
-  @Column({ type: 'json', default: {} })
+  @Column({ type: 'simple-json', default: '{}' })
   practiceSequence: any;
 
   @Column({ default: false })
