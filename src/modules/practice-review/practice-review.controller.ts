@@ -31,12 +31,14 @@ import ytdl from 'ytdl-core';
 import {
   PracticeVideoEntity,
   PracticeVideoVisibility,
+  PracticeVideoPurpose,
 } from './practice-video.entity';
 import { InMemoryVideoRepository } from './in-memory-video.repository';
 import { PracticeReviewService } from './practice-review.service';
 import { ChatHistoryService } from './chat-history.service';
 import { SavedReviewService } from './saved-review.service';
 import { UsersService } from '../users/users.service';
+import { CoachProfileService } from './coach-profile.service';
 
 const execAsync = promisify(exec);
 
@@ -53,6 +55,7 @@ export class PracticeReviewController {
     private readonly chatHistoryService: ChatHistoryService,
     private readonly savedReviewService: SavedReviewService,
     @Optional() private readonly usersService?: UsersService,
+    @Optional() private readonly coachProfileService?: CoachProfileService,
   ) {
     if (!existsSync(this.uploadDir)) {
       mkdirSync(this.uploadDir, { recursive: true });
@@ -73,6 +76,44 @@ export class PracticeReviewController {
   async listSharedVideos(@Req() req?: Request): Promise<PracticeVideoEntity[]> {
     const user = await this.getCurrentUser(req);
     return this.videoRepository.listShared(user?.id ?? null);
+  }
+
+  @Get('coach-profile')
+  async getCoachProfile(@Query('libraryId') libraryId?: string, @Req() req?: Request) {
+    const user = await this.requireCurrentUser(req);
+    if (!this.coachProfileService) return { profile: null, analyses: [] };
+    return this.coachProfileService.get(user.id, libraryId || 'default');
+  }
+
+  @Get('learning-libraries')
+  async listLearningLibraries(@Req() req?: Request) {
+    const user = await this.requireCurrentUser(req);
+    if (!this.coachProfileService) return [];
+    return this.coachProfileService.list(user.id);
+  }
+
+  @Post('learning-libraries')
+  async createLearningLibrary(
+    @Body() body: { name?: string; style?: string; role?: string },
+    @Req() req?: Request,
+  ) {
+    const user = await this.requireCurrentUser(req);
+    if (!this.coachProfileService) return { error: 'Coach profile is unavailable.' };
+    const name = body.name?.trim();
+    if (!name) throw new BadRequestException('Library name is required.');
+    return this.coachProfileService.createLibrary(user.id, name, body.style, body.role);
+  }
+
+  @Post('coach-profile/corrections')
+  async addCoachCorrection(
+    @Body() body: { correction?: string; libraryId?: string },
+    @Req() req?: Request,
+  ) {
+    const user = await this.requireCurrentUser(req);
+    const correction = body.correction?.trim();
+    if (!correction) throw new BadRequestException('Correction is required.');
+    if (!this.coachProfileService) return { error: 'Coach profile is unavailable.' };
+    return this.coachProfileService.addCorrection(user.id, correction, body.libraryId || 'default');
   }
 
   @Get(':id')
@@ -134,6 +175,7 @@ export class PracticeReviewController {
       feedback?: string;
       userContext?: string;
       songInfo?: string;
+      libraryId?: string;
     },
     @Req() req?: Request,
   ) {
@@ -163,6 +205,7 @@ export class PracticeReviewController {
       body.songInfo,
       apiKey,
       requestId,
+      body.libraryId,
     );
   }
 
@@ -241,6 +284,7 @@ export class PracticeReviewController {
     @Param('chunkNumber') chunkNumberStr?: string,
     @Query('userContext') userContext?: string,
     @Query('songInfo') songInfo?: string,
+    @Query('libraryId') libraryId?: string,
     @Req() req?: Request,
   ) {
     const video = await this.getAccessibleVideoOrNull(id, req);
@@ -264,6 +308,7 @@ export class PracticeReviewController {
       songInfo,
       apiKey,
       requestId,
+      libraryId,
     );
   }
 
@@ -334,6 +379,7 @@ export class PracticeReviewController {
     songInfo?: string,
     apiKey?: string,
     requestId?: string,
+    libraryId = 'default',
   ) {
     const chunkStart = aTime + (chunkNumber - 1) * this.CHUNK_DURATION_SECONDS;
     const chunkEnd = Math.min(bTime, chunkStart + this.CHUNK_DURATION_SECONDS);
@@ -378,6 +424,9 @@ export class PracticeReviewController {
       const effectiveContext = userContext ?? cached?.userContext ?? undefined;
       const effectiveSongInfo =
         songInfo ?? (cached?.reviewData as any)?.songInfo ?? undefined;
+      const learnedProfile = this.coachProfileService
+        ? await this.coachProfileService.get(video.ownerId, libraryId)
+        : null;
       const review = (await Promise.race([
         this.reviewService.reviewVideo(
           video.title,
@@ -389,6 +438,9 @@ export class PracticeReviewController {
             userFeedback,
             userContext: effectiveContext,
             songInfo: effectiveSongInfo,
+            coachProfile: learnedProfile
+              ? JSON.stringify(learnedProfile.profile)
+              : undefined,
           },
           apiKey,
         ),
@@ -554,11 +606,13 @@ export class PracticeReviewController {
 
   @Post('upload-from-url')
   async uploadFromUrl(
-    @Body() body: { url: string; title?: string },
+    @Body() body: { url: string; title?: string; purpose?: PracticeVideoPurpose; libraryId?: string },
     @Req() req?: Request,
   ) {
     const user = await this.requireCurrentUser(req);
     const url = body.url?.trim();
+    const purpose: PracticeVideoPurpose = body.purpose === 'reference' ? 'reference' : 'practice';
+    const libraryId = body.libraryId || 'default';
     if (!url) {
       return { error: 'URL is required' };
     }
@@ -646,14 +700,32 @@ export class PracticeReviewController {
           user.id,
           user.displayName || user.email,
           'private',
+          purpose,
         );
 
         await this.videoRepository.create(video);
+
+        const review = await this.reviewService.reviewVideo(
+          video.title,
+          { durationSeconds, title: video.title },
+          await this.getUserApiKey(req),
+        );
+        const learnedProfile = purpose === 'reference' && this.coachProfileService
+          ? await this.coachProfileService.addReferenceAnalysis(
+              user.id,
+              video.id,
+              video.title,
+              libraryId,
+              review as any,
+            )
+          : undefined;
 
         return {
           success: true,
           message: `✅ Downloaded: ${videoTitle}`,
           video,
+          review,
+          learnedProfile,
           source: 'YouTube',
         };
       } else if (isInstagram) {
@@ -698,12 +770,14 @@ export class PracticeReviewController {
   )
   async uploadVideo(
     @UploadedFile() file: any,
-    @Body() body: { title?: string },
+    @Body() body: { title?: string; purpose?: PracticeVideoPurpose; libraryId?: string },
     @Req() req?: Request,
   ) {
     const user = await this.requireCurrentUser(req);
     const apiKey = await this.getUserApiKey(req);
     const title = body.title ?? file?.originalname ?? 'Untitled video';
+    const purpose: PracticeVideoPurpose = body.purpose === 'reference' ? 'reference' : 'practice';
+    const libraryId = body.libraryId || 'default';
     const fileName = file.filename ?? file.originalname;
 
     if (!file) {
@@ -720,26 +794,34 @@ export class PracticeReviewController {
       user.id,
       user.displayName || user.email,
       'private',
+      purpose,
     );
 
     await this.videoRepository.create(video);
+    const review = await this.reviewService.reviewVideo(
+      title,
+      {
+        durationSeconds: this.estimateDurationSecondsFromBytes(file.size),
+        title,
+        audioBeatCount: this.estimateBeatCountFromDuration(
+          this.estimateDurationSecondsFromBytes(file.size),
+        ),
+        movementScore: this.estimateMovementScoreFromDuration(
+          this.estimateDurationSecondsFromBytes(file.size),
+        ),
+      },
+      apiKey,
+    );
+
+    const learned = purpose === 'reference' && this.coachProfileService
+      ? await this.coachProfileService.addReferenceAnalysis(user.id, video.id, title, libraryId, review as any)
+      : undefined;
+
     return {
       video,
       message: 'Upload complete. Video is ready to practice.',
-      review: await this.reviewService.reviewVideo(
-        title,
-        {
-          durationSeconds: this.estimateDurationSecondsFromBytes(file.size),
-          title,
-          audioBeatCount: this.estimateBeatCountFromDuration(
-            this.estimateDurationSecondsFromBytes(file.size),
-          ),
-          movementScore: this.estimateMovementScoreFromDuration(
-            this.estimateDurationSecondsFromBytes(file.size),
-          ),
-        },
-        apiKey,
-      ),
+      review,
+      learnedProfile: learned,
     };
   }
 

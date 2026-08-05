@@ -26,7 +26,10 @@ import {
   ProcessingJobEntity,
   ChatMessageEntity,
   SavedReviewEntity,
+  CoachProfileEntity,
+  ReferenceVideoAnalysisEntity,
 } from './database/entities';
+import { CoachProfileService } from './modules/practice-review/coach-profile.service';
 
 @Module({
   imports: [
@@ -49,6 +52,8 @@ import {
           ProcessingJobEntity,
           ChatMessageEntity,
           SavedReviewEntity,
+          CoachProfileEntity,
+          ReferenceVideoAnalysisEntity,
         ];
 
         const databaseType =
@@ -89,6 +94,8 @@ import {
       ChatMessageEntity,
       SavedReviewEntity,
       UserEntity,
+      CoachProfileEntity,
+      ReferenceVideoAnalysisEntity,
     ]),
   ],
   controllers: [
@@ -104,6 +111,7 @@ import {
     PracticeReviewService,
     ChatHistoryService,
     SavedReviewService,
+    CoachProfileService,
     UsersService,
     {
       provide: 'LessonRepository',

@@ -8,3 +8,5 @@ export { CoachPlanEntity } from './coach-plan.entity';
 export { ProcessingJobEntity } from './processing-job.entity';
 export { ChatMessageEntity } from './chat-message.entity';
 export { SavedReviewEntity } from './saved-review.entity';
+export { CoachProfileEntity } from './coach-profile.entity';
+export { ReferenceVideoAnalysisEntity } from './reference-video-analysis.entity';

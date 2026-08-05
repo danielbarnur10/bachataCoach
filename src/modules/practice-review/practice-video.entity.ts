@@ -1,4 +1,5 @@
 export type PracticeVideoVisibility = 'private' | 'shared';
+export type PracticeVideoPurpose = 'practice' | 'reference';
 
 export class PracticeVideoEntity {
   constructor(
@@ -11,5 +12,6 @@ export class PracticeVideoEntity {
     public readonly ownerId: string,
     public readonly ownerDisplayName: string,
     public visibility: PracticeVideoVisibility = 'private',
+    public purpose: PracticeVideoPurpose = 'practice',
   ) {}
 }

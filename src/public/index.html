@@ -364,7 +364,21 @@
           <div class="controls">
             <input id="titleInput" type="text" placeholder="Video title" />
             <input id="fileInput" type="file" accept="video/*" />
+            <select id="videoPurpose" aria-label="Video purpose">
+              <option value="practice">Practice video</option>
+              <option value="reference">Teaching/reference video</option>
+            </select>
+            <select id="learningLibrary" aria-label="Learning library"></select>
+            <button id="newLibraryBtn" type="button" class="secondary-btn">New library</button>
             <button id="uploadBtn">Upload video</button>
+          </div>
+          <div id="coachProfilePanel" class="review-card" style="margin-top: 12px;">
+            <strong>🧠 What your coach profile has learned</strong>
+            <p id="coachProfileText" class="small muted" style="margin-bottom: 8px;">Upload a reference video to start building it.</p>
+            <div class="controls">
+              <input id="coachCorrectionInput" type="text" placeholder="Correct the learned profile…" />
+              <button id="coachCorrectionBtn" type="button">Save correction</button>
+            </div>
           </div>
           <div style="margin-top: 12px; padding: 12px; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 12px;">
             <div style="margin-bottom: 8px;">
@@ -423,6 +437,9 @@
         userContext: '',
         songInfo: '',
         savedReviews: [],
+        coachProfile: null,
+        learningLibraries: [],
+        selectedLibraryId: localStorage.getItem('bachataLibraryId') || 'default',
       };
 
       function openAuthDialog() {
@@ -680,6 +697,8 @@
           }
           state.videos = await mineResponse.json();
           state.sharedVideos = await sharedResponse.json();
+          await refreshLearningLibraries();
+          await refreshCoachProfile();
           if (state.selectedVideoId && !getKnownVideo(state.selectedVideoId)) {
             resetSelectedVideoState();
           }
@@ -691,6 +710,58 @@
         } catch (error) {
           document.getElementById('uploadStatus').textContent = 'Could not load videos from the backend.';
         }
+      }
+
+      async function refreshCoachProfile() {
+        if (!state.currentUser) {
+          state.coachProfile = null;
+          renderCoachProfile();
+          return;
+        }
+        try {
+          const response = await authorizedFetch(`/videos/coach-profile?libraryId=${encodeURIComponent(state.selectedLibraryId)}`);
+          if (!response.ok) return;
+          state.coachProfile = await response.json();
+          renderCoachProfile();
+        } catch {
+          // The video library remains usable if profile loading fails.
+        }
+      }
+
+      async function refreshLearningLibraries() {
+        if (!state.currentUser) return;
+        const response = await authorizedFetch('/videos/learning-libraries');
+        if (!response.ok) return;
+        state.learningLibraries = await response.json();
+        if (!state.learningLibraries.some((library) => library.libraryId === state.selectedLibraryId)) {
+          state.selectedLibraryId = state.learningLibraries[0]?.libraryId || 'default';
+        }
+        const select = document.getElementById('learningLibrary');
+        if (select) {
+          select.innerHTML = state.learningLibraries.map((library) =>
+            `<option value="${library.libraryId}">${library.libraryName}${library.style ? ` · ${library.style}` : ''}${library.role ? ` · ${library.role}` : ''}</option>`
+          ).join('');
+          select.value = state.selectedLibraryId;
+        }
+      }
+
+      function renderCoachProfile() {
+        const target = document.getElementById('coachProfileText');
+        if (!target) return;
+        const profile = state.coachProfile?.profile;
+        if (!profile) {
+          target.textContent = 'Sign in and upload a reference video to start building it.';
+          return;
+        }
+        const parts = [
+          ...(profile.timingPriorities || []).slice(-2),
+          ...(profile.styleInfluences || []).slice(-2),
+          ...(profile.teachingNotes || []).slice(-2),
+          ...(profile.corrections || []).slice(-2),
+        ];
+        target.textContent = parts.length
+          ? parts.join(' • ')
+          : 'Your profile is ready. Add reference videos or corrections to teach it.';
       }
 
       function renderFiles() {
@@ -1290,7 +1361,8 @@
         try {
           const ctx = state.userContext ? `&userContext=${encodeURIComponent(state.userContext)}` : '';
           const song = state.songInfo ? `&songInfo=${encodeURIComponent(state.songInfo)}` : '';
-          const response = await authorizedFetch(`/videos/${videoId}/review/chunk/${chunkNumber}?aTime=${aTime}&bTime=${bTime}${ctx}${song}`);
+          const library = `&libraryId=${encodeURIComponent(state.selectedLibraryId)}`;
+          const response = await authorizedFetch(`/videos/${videoId}/review/chunk/${chunkNumber}?aTime=${aTime}&bTime=${bTime}${ctx}${song}${library}`);
           if (!response.ok) throw new Error('Chunk unavailable');
           const data = await response.json();
           renderReviewPanel(videoId, data);
@@ -1657,6 +1729,7 @@
               feedback: userMessages,
               userContext: state.userContext || undefined,
               songInfo: state.songInfo || undefined,
+              libraryId: state.selectedLibraryId,
             }),
           });
           const data = await res.json();
@@ -1724,6 +1797,8 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               url,
+              purpose: document.getElementById('videoPurpose').value,
+              libraryId: state.selectedLibraryId,
               title: document.getElementById('titleInput').value || undefined,
             }),
           });
@@ -1797,6 +1872,8 @@
         const formData = new FormData();
         formData.append('file', file);
         formData.append('title', titleInput.value || file.name);
+        formData.append('purpose', document.getElementById('videoPurpose').value);
+        formData.append('libraryId', state.selectedLibraryId);
 
         try {
           const response = await authorizedFetch('/videos', { method: 'POST', body: formData });
@@ -1809,6 +1886,52 @@
         } catch (error) {
           uploadStatus.textContent = error.message || 'Upload failed. Please try again.';
         }
+      });
+
+      document.getElementById('coachCorrectionBtn').addEventListener('click', async () => {
+        if (!state.currentUser) {
+          openAuthDialog();
+          return;
+        }
+        const input = document.getElementById('coachCorrectionInput');
+        const correction = input.value.trim();
+        if (!correction) return;
+        try {
+          const response = await authorizedFetch('/videos/coach-profile/corrections', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ correction, libraryId: state.selectedLibraryId }),
+          });
+          state.coachProfile = await parseApiResponse(response);
+          input.value = '';
+          renderCoachProfile();
+        } catch (error) {
+          document.getElementById('coachProfileText').textContent = error.message;
+        }
+      });
+
+      document.getElementById('learningLibrary').addEventListener('change', async (event) => {
+        state.selectedLibraryId = event.target.value;
+        localStorage.setItem('bachataLibraryId', state.selectedLibraryId);
+        await refreshCoachProfile();
+      });
+
+      document.getElementById('newLibraryBtn').addEventListener('click', async () => {
+        if (!state.currentUser) return openAuthDialog();
+        const name = window.prompt('Library name, for example: Jack & Jill Follower');
+        if (!name?.trim()) return;
+        const style = window.prompt('Style (Traditional, Sensual, Urban, or Mixed):') || undefined;
+        const role = window.prompt('Role (Leader, Follower, or Both):') || undefined;
+        const response = await authorizedFetch('/videos/learning-libraries', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, style, role }),
+        });
+        const library = await parseApiResponse(response);
+        state.selectedLibraryId = library.libraryId;
+        localStorage.setItem('bachataLibraryId', state.selectedLibraryId);
+        await refreshLearningLibraries();
+        await refreshCoachProfile();
       });
 
       // Theme management — runs before first paint

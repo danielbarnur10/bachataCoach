@@ -24,6 +24,7 @@ export interface ReviewContext {
   userFeedback?: string;
   userContext?: string;
   songInfo?: string;
+  coachProfile?: string;
 }
 
 export interface ChatMessage {
@@ -76,6 +77,7 @@ export class PracticeReviewService {
           context.userFeedback,
           context.userContext,
           context.songInfo,
+          context.coachProfile,
           effectiveApiKey,
         );
       } catch (error) {
@@ -106,6 +108,7 @@ export class PracticeReviewService {
     userFeedback?: string,
     userContext?: string,
     songInfo?: string,
+    coachProfile?: string,
     apiKey?: string,
   ): Promise<VideoReviewResult> {
     const feedbackSection = userFeedback?.trim()
@@ -118,6 +121,10 @@ export class PracticeReviewService {
 
     const songSection = songInfo?.trim()
       ? `\n\nSONG IDENTIFICATION:\nThe dancer is practicing to: "${songInfo}"\nUsing your knowledge of this song/artist:\n- Identify the bachata subgenre or dance context (Sensual / Urban / Traditional / Fusion / Moderno)\n- Reference the typical BPM, energy, and emotional tone for this specific song\n- Note key structural moments (when does the Mambo hit? where is the Majao section?)\n- Tailor ALL rhythmic observations to this song's specific feel — e.g. a sensual Romeo Santos track demands different body expression than a traditional Frank Reyes or an urban Aventura cut.`
+      : '';
+
+    const coachProfileSection = coachProfile?.trim()
+      ? `\n\nLEARNED COACHING PROFILE:\n${coachProfile}\nCompare the dancer with this profile, while reporting only observable evidence.`
       : '';
 
   const prompt = `
@@ -185,6 +192,8 @@ ${songSection}
 
 Additional user context:
 ${userContextSection}
+
+${coachProfileSection}
 
 Previous feedback:
 ${feedbackSection}
