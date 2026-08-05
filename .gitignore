@@ -1,0 +1,35 @@
+# Dependencies
+**/node_modules/
+
+# Build and coverage output
+**/dist/
+**/build/
+**/coverage/
+*.tsbuildinfo
+
+# Environment files and local secrets
+**/.env
+**/.env.*
+!**/.env.example
+
+# Logs and local caches
+*.log
+**/.npm-cache/
+**/.cache/
+**/.tmp/
+**/.temp/
+
+# Runtime uploads and generated data
+backend/uploads/*
+
+# OS and editor files
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# Generated Vite declaration output
+frontend/vite.config.d.ts
