@@ -9,7 +9,7 @@ import { InMemoryLessonRepository } from './infrastructure/repositories/in-memor
 import { LessonsController } from './presentation/controllers/lessons.controller';
 import { HealthController } from './presentation/controllers/health.controller';
 import { PracticeReviewController } from './modules/practice-review/practice-review.controller';
-import { InMemoryVideoRepository } from './modules/practice-review/in-memory-video.repository';
+import { TypeOrmVideoRepository } from './modules/practice-review/typeorm-video.repository';
 import { PracticeReviewService } from './modules/practice-review/practice-review.service';
 import { ChatHistoryService } from './modules/practice-review/chat-history.service';
 import { SavedReviewService } from './modules/practice-review/saved-review.service';
@@ -94,6 +94,7 @@ import { CoachProfileService } from './modules/practice-review/coach-profile.ser
       ChatMessageEntity,
       SavedReviewEntity,
       UserEntity,
+      VideoEntity,
       CoachProfileEntity,
       ReferenceVideoAnalysisEntity,
     ]),
@@ -118,7 +119,10 @@ import { CoachProfileService } from './modules/practice-review/coach-profile.ser
       useClass: InMemoryLessonRepository,
     },
     InMemoryLessonRepository,
-    InMemoryVideoRepository,
+    {
+      provide: 'VideoRepository',
+      useClass: TypeOrmVideoRepository,
+    },
   ],
 })
 export class AppModule {}

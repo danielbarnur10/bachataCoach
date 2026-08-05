@@ -72,6 +72,9 @@ export class VideoEntity {
   @Column({ default: 'private' })
   visibility: VideoVisibility;
 
+  @Column({ default: 'practice' })
+  purpose: 'practice' | 'reference';
+
   @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
   lastPlaybackPosition: number;
 

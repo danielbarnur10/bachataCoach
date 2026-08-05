@@ -58,8 +58,17 @@ async function bootstrap() {
   );
   app.enableShutdownHooks();
 
+  const allowedOrigins = process.env.FRONTEND_URL
+    ?.split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
   app.enableCors({
-    origin: process.env.FRONTEND_URL?.split(',').map((value) => value.trim()) ?? true,
+    origin:
+      allowedOrigins && allowedOrigins.length > 0
+        ? allowedOrigins
+        : process.env.NODE_ENV === 'production'
+          ? false
+          : true,
     credentials: true,
   });
 
@@ -68,4 +77,8 @@ async function bootstrap() {
     `API listening on port ${process.env.PORT ?? 3000} with logger levels: ${loggerLevels.join(', ')}`,
   );
 }
-bootstrap();
+void bootstrap().catch((error: unknown) => {
+  const message = error instanceof Error ? error.stack ?? error.message : String(error);
+  new Logger('Bootstrap').error(`Application failed to start: ${message}`);
+  process.exitCode = 1;
+});

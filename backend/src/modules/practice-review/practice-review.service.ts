@@ -25,6 +25,7 @@ export interface ReviewContext {
   userContext?: string;
   songInfo?: string;
   coachProfile?: string;
+  signal?: AbortSignal;
 }
 
 export interface ChatMessage {
@@ -79,6 +80,7 @@ export class PracticeReviewService {
           context.songInfo,
           context.coachProfile,
           effectiveApiKey,
+          context.signal,
         );
       } catch (error) {
         const errorMessage =
@@ -110,6 +112,7 @@ export class PracticeReviewService {
     songInfo?: string,
     coachProfile?: string,
     apiKey?: string,
+    signal?: AbortSignal,
   ): Promise<VideoReviewResult> {
     const feedbackSection = userFeedback?.trim()
       ? `\n\nIMPORTANT \u2014 DANCER CORRECTION: The dancer provided this feedback on the previous analysis:\n"${userFeedback}"\nAdjust your observations specifically to address this correction.`
@@ -220,6 +223,7 @@ ${feedbackSection}
           { role: 'user', content: prompt },
         ],
       }),
+      signal,
     });
 
     if (!response.ok) {
@@ -466,6 +470,7 @@ ${feedbackSection}
     history: ChatMessage[],
     reviewContext?: string,
     apiKey?: string,
+    signal?: AbortSignal,
   ): Promise<{ reply: string; actions: ChatAction[] }> {
     const effectiveApiKey = apiKey ?? this.modelApiKey;
     if (!effectiveApiKey) {
@@ -514,6 +519,7 @@ Focus on rhythm, timing, energy, and musicality. Be encouraging and specific.${r
           { role: 'user', content: message },
         ],
       }),
+      signal,
     });
 
     if (!response.ok) {

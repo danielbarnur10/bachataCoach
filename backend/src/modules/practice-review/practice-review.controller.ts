@@ -16,31 +16,27 @@ import {
   UnauthorizedException,
   UploadedFile,
   UseInterceptors,
+  Inject,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { randomUUID } from 'crypto';
 import { Request, Response } from 'express';
-import { existsSync, mkdirSync, createWriteStream } from 'fs';
+import { createReadStream, createWriteStream, existsSync, mkdirSync } from 'fs';
 import { diskStorage } from 'multer';
 import { join } from 'path';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import { stat } from 'fs/promises';
-import axios from 'axios';
+import { stat, unlink } from 'fs/promises';
 import ytdl from 'ytdl-core';
 import {
   PracticeVideoEntity,
   PracticeVideoVisibility,
   PracticeVideoPurpose,
 } from './practice-video.entity';
-import { InMemoryVideoRepository } from './in-memory-video.repository';
 import { PracticeReviewService } from './practice-review.service';
 import { ChatHistoryService } from './chat-history.service';
 import { SavedReviewService } from './saved-review.service';
 import { UsersService } from '../users/users.service';
 import { CoachProfileService } from './coach-profile.service';
-
-const execAsync = promisify(exec);
+import { VideoRepository } from './practice-video.repository';
 
 @Controller('videos')
 export class PracticeReviewController {
@@ -50,7 +46,8 @@ export class PracticeReviewController {
   private readonly MAX_CHUNK_DURATION_SECONDS = 20;
 
   constructor(
-    private readonly videoRepository: InMemoryVideoRepository,
+    @Inject('VideoRepository')
+    private readonly videoRepository: VideoRepository,
     private readonly reviewService: PracticeReviewService,
     private readonly chatHistoryService: ChatHistoryService,
     private readonly savedReviewService: SavedReviewService,
@@ -380,7 +377,7 @@ export class PracticeReviewController {
     apiKey?: string,
     requestId?: string,
     libraryId = 'default',
-  ) {
+  ): Promise<any> {
     const chunkStart = aTime + (chunkNumber - 1) * this.CHUNK_DURATION_SECONDS;
     const chunkEnd = Math.min(bTime, chunkStart + this.CHUNK_DURATION_SECONDS);
 
@@ -414,7 +411,10 @@ export class PracticeReviewController {
       }
     }
 
+    const abortController = new AbortController();
+    let timeout: NodeJS.Timeout | undefined;
     try {
+      timeout = setTimeout(() => abortController.abort(), 45_000);
       const cached = await this.savedReviewService.find(
         video.id,
         aTime,
@@ -427,8 +427,7 @@ export class PracticeReviewController {
       const learnedProfile = this.coachProfileService
         ? await this.coachProfileService.get(video.ownerId, libraryId)
         : null;
-      const review = (await Promise.race([
-        this.reviewService.reviewVideo(
+      const review = await this.reviewService.reviewVideo(
           video.title,
           {
             durationSeconds: chunkDurationSeconds,
@@ -441,13 +440,11 @@ export class PracticeReviewController {
             coachProfile: learnedProfile
               ? JSON.stringify(learnedProfile.profile)
               : undefined,
+            signal: abortController.signal,
           },
           apiKey,
-        ),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('AI analysis timeout')), 45000),
-        ),
-      ])) as any;
+        );
+      clearTimeout(timeout);
       this.logger.log(
         `chunk analysis complete (videoId=${video.id}, chunk=${chunkNumber}, source=${review.analysisSource ?? 'unknown'}, forceRegenerate=${forceRegenerate}, requestId=${requestId ?? 'n/a'})`,
       );
@@ -504,6 +501,7 @@ export class PracticeReviewController {
       );
       return result;
     } catch (error) {
+      if (timeout) clearTimeout(timeout);
       const errorMessage =
         error instanceof Error ? `${error.name}: ${error.message}` : String(error);
       this.logger.error(
@@ -588,20 +586,42 @@ export class PracticeReviewController {
       return;
     }
 
+    const fileSize = (await stat(filePath)).size;
     const rangeHeader = req.headers.range;
-    if (rangeHeader) {
-      try {
-        res.sendFile(filePath);
-        return;
-      } catch (error) {
-        res
-          .status(416)
-          .json({ error: 'Unable to stream the requested video range' });
-        return;
-      }
+    if (!rangeHeader) {
+      res.setHeader('Content-Length', fileSize);
+      res.setHeader('Accept-Ranges', 'bytes');
+      res.sendFile(filePath);
+      return;
     }
 
-    res.sendFile(filePath);
+    const match = /^bytes=(\d*)-(\d*)$/.exec(rangeHeader);
+    if (!match) {
+      res.status(416).setHeader('Content-Range', `bytes */${fileSize}`).end();
+      return;
+    }
+
+    const start = match[1]
+      ? Number(match[1])
+      : Math.max(0, fileSize - Number(match[2] || 0));
+    const end = match[2] ? Number(match[2]) : fileSize - 1;
+    if (
+      !Number.isInteger(start) ||
+      !Number.isInteger(end) ||
+      start < 0 ||
+      end < start ||
+      start >= fileSize
+    ) {
+      res.status(416).setHeader('Content-Range', `bytes */${fileSize}`).end();
+      return;
+    }
+
+    const boundedEnd = Math.min(end, fileSize - 1);
+    res.status(206);
+    res.setHeader('Content-Range', `bytes ${start}-${boundedEnd}/${fileSize}`);
+    res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Content-Length', boundedEnd - start + 1);
+    createReadStream(filePath, { start, end: boundedEnd }).pipe(res);
   }
 
   @Post('upload-from-url')
@@ -618,8 +638,14 @@ export class PracticeReviewController {
     }
 
     // Check if YouTube or Instagram
-    const isYouTube = url.includes('youtube.com') || url.includes('youtu.be');
-    const isInstagram = url.includes('instagram.com');
+    let hostname: string;
+    try {
+      hostname = new URL(url).hostname.toLowerCase();
+    } catch {
+      return { error: 'Please provide a valid URL.' };
+    }
+    const isYouTube = ['youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtu.be'].includes(hostname);
+    const isInstagram = ['instagram.com', 'www.instagram.com'].includes(hostname);
 
     if (!isYouTube && !isInstagram) {
       return { error: 'Only YouTube and Instagram URLs are supported' };
@@ -759,12 +785,19 @@ export class PracticeReviewController {
           cb(null, uploadDir);
         },
         filename: (_req, file, cb) => {
-          const safeName = file.originalname.replace(/\s+/g, '-');
-          cb(null, `${randomUUID()}-${safeName}`);
+          const extension = file.originalname.match(/\.[a-z0-9]{1,10}$/i)?.[0] ?? '';
+          cb(null, `${randomUUID()}${extension.toLowerCase()}`);
         },
       }),
       limits: {
         fileSize: 1024 * 1024 * 1024,
+      },
+      fileFilter: (_req, file, callback) => {
+        if (!file.mimetype.startsWith('video/')) {
+          callback(new BadRequestException('Only video files are supported.'), false);
+          return;
+        }
+        callback(null, true);
       },
     }),
   )
@@ -775,14 +808,13 @@ export class PracticeReviewController {
   ) {
     const user = await this.requireCurrentUser(req);
     const apiKey = await this.getUserApiKey(req);
-    const title = body.title ?? file?.originalname ?? 'Untitled video';
-    const purpose: PracticeVideoPurpose = body.purpose === 'reference' ? 'reference' : 'practice';
-    const libraryId = body.libraryId || 'default';
-    const fileName = file.filename ?? file.originalname;
-
     if (!file) {
       throw new BadRequestException('Please choose a video file.');
     }
+    const title = body.title?.trim() || file.originalname || 'Untitled video';
+    const purpose: PracticeVideoPurpose = body.purpose === 'reference' ? 'reference' : 'practice';
+    const libraryId = body.libraryId || 'default';
+    const fileName = file.filename;
 
     const video = new PracticeVideoEntity(
       randomUUID(),
@@ -960,11 +992,17 @@ export class PracticeReviewController {
     @Param('id') id: string,
     @Req() req?: Request,
   ): Promise<{ success: boolean }> {
-    const { user } = await this.requireOwnedVideo(id, req);
+    const { user, video } = await this.requireOwnedVideo(id, req);
     const deleted = await this.videoRepository.deleteOwned(id, user.id);
     if (!deleted) {
       throw new ForbiddenException('You can only delete your own videos.');
     }
+
+    await unlink(join(this.uploadDir, video.filename)).catch((error: unknown) => {
+      this.logger.warn(
+        `video metadata deleted but file cleanup failed (videoId=${id}): ${error instanceof Error ? error.message : String(error)}`,
+      );
+    });
 
     return { success: true };
   }
